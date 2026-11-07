@@ -2,6 +2,8 @@
 
 This setup runs Moodle, Apache/PHP 8.2, MariaDB 10.11, and (optionally) Selenium entirely in Docker. XAMPP is not required.
 
+The image includes the custom Kanban activity and Kanban quick view (ButtonKB) block from `plugins/`. Moodle installs or upgrades them from **Site administration -> Notifications** after the first start.
+
 ## Start a fresh site
 
 ```powershell
