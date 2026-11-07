@@ -6,3 +6,4 @@ moodledata_behat/
 database/*.sql
 *.log
 node_modules/
+!docker/config.php

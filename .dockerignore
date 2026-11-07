@@ -8,3 +8,4 @@ moodledata_behat
 database/*.sql
 *.log
 .env
+!docker/config.php
