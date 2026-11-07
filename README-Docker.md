@@ -3,6 +3,7 @@
 This setup runs Moodle, Apache/PHP 8.2, MariaDB 10.11, and (optionally) Selenium entirely in Docker. XAMPP is not required.
 
 The image includes the custom Kanban activity and Kanban quick view (ButtonKB) block from `plugins/`. Moodle installs or upgrades them from **Site administration -> Notifications** after the first start.
+Moodle cron runs in the `cron` service, enabling internal deadline notifications.
 
 ## Start a fresh site
 
@@ -21,6 +22,10 @@ Open `http://localhost:8080` and complete Moodle's web installer. The Docker con
 3. Copy the old `moodledata` only if its files are required. Never copy caches; use Moodle's backup/restore for course content where possible.
 
 The Docker Moodle config uses `/var/moodledata` and `http://localhost:8080`. Do not copy the Windows `config.php` into the image.
+
+## Notification scope
+
+This project uses Moodle internal notifications only. Email and mobile push delivery are outside its scope. Check cron with `docker compose ps` or `docker compose logs cron`.
 
 ## Testing
 

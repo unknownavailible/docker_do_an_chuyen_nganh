@@ -2,6 +2,7 @@ services:
   moodle:
     build:
       context: .
+    image: moodle-moodle
     container_name: moodle-app
     depends_on:
       db:
@@ -20,6 +21,24 @@ services:
       - behatdata:/var/moodledata_behat
     restart: unless-stopped
 
+  cron:
+    image: moodle-moodle
+    container_name: moodle-cron
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      MOODLE_DB_HOST: db
+      MOODLE_DB_NAME: ${MOODLE_DB_NAME}
+      MOODLE_DB_USER: ${MOODLE_DB_USER}
+      MOODLE_DB_PASSWORD: ${MOODLE_DB_PASSWORD}
+      MOODLE_WWWROOT: ${MOODLE_WWWROOT}
+    volumes:
+      - moodledata:/var/moodledata
+    command: >
+      sh -c 'while true; do php /var/www/html/admin/cli/cron.php; sleep 60; done'
+    restart: unless-stopped
+
   db:
     image: mariadb:10.11
     container_name: moodle-db
@@ -31,7 +50,7 @@ services:
     volumes:
       - dbdata:/var/lib/mysql
     healthcheck:
-      test: ["CMD", "mariadb-admin", "ping", "-h", "localhost", "-uroot", "-p${MARIADB_ROOT_PASSWORD}"]
+      test: ["CMD-SHELL", "mariadb-admin ping -h localhost -u$$MARIADB_USER -p$$MARIADB_PASSWORD"]
       interval: 10s
       timeout: 5s
       retries: 12
