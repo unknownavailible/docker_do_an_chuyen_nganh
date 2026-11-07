@@ -1,0 +1,8 @@
+.env
+config.php
+moodledata/
+moodledata_phpunit/
+moodledata_behat/
+database/*.sql
+*.log
+node_modules/

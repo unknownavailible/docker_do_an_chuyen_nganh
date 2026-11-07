@@ -1,0 +1,10 @@
+.git
+.github
+node_modules
+config.php
+moodledata
+moodledata_phpunit
+moodledata_behat
+database/*.sql
+*.log
+.env

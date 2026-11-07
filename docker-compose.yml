@@ -1,0 +1,53 @@
+services:
+  moodle:
+    build:
+      context: .
+    container_name: moodle-app
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      MOODLE_DB_HOST: db
+      MOODLE_DB_NAME: ${MOODLE_DB_NAME}
+      MOODLE_DB_USER: ${MOODLE_DB_USER}
+      MOODLE_DB_PASSWORD: ${MOODLE_DB_PASSWORD}
+      MOODLE_WWWROOT: ${MOODLE_WWWROOT}
+    ports:
+      - "${MOODLE_HTTP_PORT}:80"
+    volumes:
+      - moodledata:/var/moodledata
+      - phpunitdata:/var/moodledata_phpunit
+      - behatdata:/var/moodledata_behat
+    restart: unless-stopped
+
+  db:
+    image: mariadb:10.11
+    container_name: moodle-db
+    environment:
+      MARIADB_DATABASE: ${MOODLE_DB_NAME}
+      MARIADB_USER: ${MOODLE_DB_USER}
+      MARIADB_PASSWORD: ${MOODLE_DB_PASSWORD}
+      MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD}
+    volumes:
+      - dbdata:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mariadb-admin", "ping", "-h", "localhost", "-uroot", "-p${MARIADB_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+
+  selenium:
+    image: selenium/standalone-chrome:latest
+    profiles: ["test"]
+    shm_size: 2gb
+    environment:
+      SE_NODE_MAX_SESSIONS: 1
+    ports:
+      - "${SELENIUM_PORT}:4444"
+
+volumes:
+  dbdata:
+  moodledata:
+  phpunitdata:
+  behatdata:
