@@ -24,11 +24,21 @@ RUN curl -fsSL "https://download.moodle.org/download.php/direct/stable403/moodle
     && tar -xzf /tmp/moodle.tgz --strip-components=1 -C /var/www/html \
     && rm /tmp/moodle.tgz
 
-COPY --chown=www-data:www-data plugins/mod_kanban /var/www/html/mod/kanban
-COPY --chown=www-data:www-data plugins/block_buttonkb /var/www/html/blocks/buttonkb
+COPY --from=composer:2 /usr/bin/composer /usr/local/bin/composer
+RUN COMPOSER_ALLOW_SUPERUSER=1 composer install --working-dir=/var/www/html \
+    --prefer-dist --no-interaction --no-progress --optimize-autoloader
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends locales \
+    && echo 'en_AU.UTF-8 UTF-8' > /etc/locale.gen \
+    && locale-gen \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --chown=www-data:www-data plugins/mod_kanban/ /var/www/html/mod/kanban/
+COPY --chown=www-data:www-data plugins/block_buttonkb/ /var/www/html/blocks/buttonkb/
 COPY --chown=www-data:www-data docker/config.php /var/www/html/config.php
 COPY docker/php.ini /usr/local/etc/php/conf.d/moodle.ini
 
 RUN mkdir -p /var/moodledata /var/moodledata_phpunit /var/moodledata_behat \
-    && chown -R www-data:www-data /var/www/html /var/moodledata /var/moodledata_phpunit /var/moodledata_behat
+    && chown -R www-data:www-data /var/moodledata /var/moodledata_phpunit /var/moodledata_behat
 

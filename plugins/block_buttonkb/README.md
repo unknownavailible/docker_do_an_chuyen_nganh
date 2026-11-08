@@ -1,6 +1,6 @@
 # Kanban Quick View block
 
-`block_buttonkb` is a Moodle 4.5 block that installs a floating calendar button
+`block_buttonkb` supports Moodle 4.3 and installs a floating calendar button
 on the site home page and the default personal Dashboard. Installation also adds
 the block to existing personal Dashboards that already contain a block.
 

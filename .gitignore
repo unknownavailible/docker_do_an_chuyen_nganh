@@ -7,3 +7,4 @@ database/*.sql
 *.log
 node_modules/
 !docker/config.php
+.review-upstream/
