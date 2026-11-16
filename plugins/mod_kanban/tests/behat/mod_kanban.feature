@@ -33,3 +33,9 @@ Feature: Kanban permissions and WIP enforcement
     When I add a card to group "Group A"
     Then group "Group A" can see and move it
     And group "Group B" cannot see or operate on it
+
+  Scenario: Teacher opens the exact submitted card from the dashboard review queue
+    Given I am logged in as a teacher
+    And a submitted card is waiting for review in group "Group A"
+    When I click the review action for that card
+    Then the submitted card detail should open automatically

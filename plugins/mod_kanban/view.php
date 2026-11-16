@@ -3,6 +3,7 @@ require_once(__DIR__ . '/../../config.php');
 require_once(__DIR__ . '/lib.php');
 
 $id = required_param('id', PARAM_INT);
+$requestedcardid = optional_param('cardid', 0, PARAM_INT);
 
 $cm = get_coursemodule_from_id('kanban', $id, 0, false, MUST_EXIST);
 $course = $DB->get_record('course', ['id' => $cm->course], '*', MUST_EXIST);
@@ -20,6 +21,17 @@ $PAGE->set_heading(format_string($course->fullname));
 $PAGE->set_context($context);
 
 $currentgroup = groups_get_activity_group($cm, true);
+$autopencardid = 0;
+if ($requestedcardid) {
+    $requestedcard = $DB->get_record('kanban_cards', [
+        'id' => $requestedcardid,
+        'kanbanid' => $kanban->id,
+    ]);
+    if ($requestedcard && kanban_user_has_group_access($cm, $requestedcard->groupid, $context) &&
+            (!$currentgroup || (int)$requestedcard->groupid === (int)$currentgroup)) {
+        $autopencardid = (int)$requestedcard->id;
+    }
+}
 $columns = $DB->get_records('kanban_columns', ['kanbanid' => $kanban->id], 'sortorder ASC');
 
 // Cột cuối cùng (thường là Done)
@@ -44,6 +56,7 @@ foreach ($columns as $col) {
         $has_feedback = $comments_table_exists && $DB->count_records('kanban_card_comments', ['cardid' => $card->id]) > 0;
         $assigneenames = kanban_get_card_assignee_names($card->id);
         $assigneeids = kanban_get_card_assignee_ids($card->id);
+        $cardcreator = !empty($card->creatorid) ? $DB->get_record('user', ['id' => $card->creatorid]) : false;
 
         $card_list[] = [
             'id' => $card->id,
@@ -59,7 +72,12 @@ foreach ($columns as $col) {
             'is_overdue' => $is_overdue,
             'is_due_soon' => $is_due_soon,
             'has_feedback' => $has_feedback,
-            'submissionurl' => !empty($card->task_url) ? $card->task_url : (!empty($card->submissionurl) ? $card->submissionurl : ''),
+            'taskurl' => $card->task_url ?? '',
+            'submissionurl' => $card->submission_url ?? '',
+            'workflow_state' => $card->workflow_state ?? 'notstarted',
+            'creator_name' => $cardcreator ? fullname($cardcreator) : get_string('unknowncreator', 'mod_kanban'),
+            'timecreated_formatted' => userdate($card->timecreated),
+            'timemodified_formatted' => userdate($card->timemodified),
         ];
     }
 
@@ -94,6 +112,7 @@ $templatecontext = [
     'creatorname' => $creator ? fullname($creator) : get_string('unknowncreator', 'mod_kanban'),
     'intro' => format_module_intro('kanban', $kanban, $cm->id),
     'can_manage' => has_capability('mod/kanban:managecards', $context),
+    'can_update_progress' => has_capability('mod/kanban:updateprogress', $context),
     'can_manage_columns' => has_capability('mod/kanban:managecolumns', $context) ||
         has_capability('mod/kanban:viewdashboard', $context),
     'can_view_dashboard' => has_capability('mod/kanban:viewdashboard', $context),
@@ -110,8 +129,10 @@ $PAGE->requires->strings_for_js([
     'confirmdeletecard', 'columnnameprompt', 'columndescprompt', 'columncolorprompt',
     'columnwipprompt', 'confirmdeletecolumn', 'errornotjson', 'errorhttpcode',
     'required', 'error_duedate_past', 'dashboard_unassigned',
+    'error_assignment_fields_required', 'submissionfile', 'taskfile', 'error_upload_empty',
+    'revisioncommentrequired',
 ], 'mod_kanban');
-$PAGE->requires->js_call_amd('mod_kanban/board', 'init', [$cm->id, $kanban->id]);
+$PAGE->requires->js_call_amd('mod_kanban/board', 'init', [$cm->id, $kanban->id, $autopencardid, (int)$currentgroup]);
 
 echo $OUTPUT->header();
 groups_print_activity_menu($cm, $CFG->wwwroot . '/mod/kanban/view.php?id=' . $cm->id);

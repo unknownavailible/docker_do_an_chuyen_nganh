@@ -37,6 +37,8 @@ $donecolumnid = $donecolumn ? (int)$donecolumn->id : 0;
 
 $now = time();
 $donecount = 0;
+$reviewcount = 0;
+$inprogresscount = 0;
 $overduecount = 0;
 $duesooncount = 0;
 $columncounts = [];
@@ -47,15 +49,26 @@ foreach ($columns as $col) {
 // Thống kê theo thành viên (đếm qua bảng assignees để đúng multi-assignee).
 $userstats = []; // userid => ['name' => ..., 'total' => 0, 'done' => 0, 'overdue' => 0]
 $overduelist = [];
+$reviewlist = [];
 
 foreach ($allcards as $card) {
-    $isdone = ($donecolumnid && (int)$card->columnid === $donecolumnid);
+    $workflowstate = $card->workflow_state ?? '';
+    // Only teacher-approved work is complete. Column fallback supports pre-upgrade records.
+    $isdone = $workflowstate === 'completed' ||
+        ($workflowstate === '' && $donecolumnid && (int)$card->columnid === $donecolumnid);
+    $isreview = $workflowstate === 'review';
     if (isset($columncounts[$card->columnid])) {
         $columncounts[$card->columnid]['count']++;
     }
     if ($isdone) {
         $donecount++;
+    } else if ($isreview) {
+        $reviewcount++;
+        $reviewlist[] = $card;
     } else {
+        if ($workflowstate === 'inprogress') {
+            $inprogresscount++;
+        }
         if (!empty($card->duedate) && (int)$card->duedate < $now) {
             $overduecount++;
         } else if (!empty($card->duedate) && (int)$card->duedate <= ($now + 48 * HOURSECS)) {
@@ -79,22 +92,27 @@ foreach ($allcards as $card) {
             } else {
                 $name = get_string('dashboard_unassigned', 'mod_kanban');
             }
-            $userstats[$uid] = ['name' => $name, 'total' => 0, 'done' => 0, 'overdue' => 0];
+            $userstats[$uid] = ['name' => $name, 'total' => 0, 'done' => 0, 'review' => 0, 'overdue' => 0];
         }
         $userstats[$uid]['total']++;
         if ($isdone) {
             $userstats[$uid]['done']++;
+        } else if ($isreview) {
+            $userstats[$uid]['review']++;
         } else if (!empty($card->duedate) && (int)$card->duedate < $now) {
             $userstats[$uid]['overdue']++;
         }
     }
 
-    if (!$isdone && !empty($card->duedate) && (int)$card->duedate <= ($now + 48 * HOURSECS)) {
+    if (!$isdone && !$isreview && !empty($card->duedate) && (int)$card->duedate <= ($now + 48 * HOURSECS)) {
         $overduelist[] = $card;
     }
 }
 usort($overduelist, function($a, $b) {
     return ((int)$a->duedate - (int)$b->duedate);
+});
+usort($reviewlist, function($a, $b) {
+    return ((int)$a->timemodified - (int)$b->timemodified) * -1;
 });
 
 // Tính tỷ lệ hoàn thành (%)
@@ -127,12 +145,13 @@ if (class_exists('\core\chart_bar') && class_exists('\core\chart_pie')) {
     $progresschart->set_doughnut(true);
     $progressseries = new \core\chart_series(
         get_string('progress', 'mod_kanban'),
-        [$donecount, $totalcards - $donecount - $overduecount, $overduecount]
+        [$donecount, $reviewcount, max(0, $totalcards - $donecount - $reviewcount - $overduecount), $overduecount]
     );
-    $progressseries->set_colors(['#28a745', '#6c757d', '#dc3545']);
+    $progressseries->set_colors(['#28a745', '#17a2b8', '#6c757d', '#dc3545']);
     $progresschart->add_series($progressseries);
     $progresschart->set_labels([
         get_string('column_done', 'mod_kanban'),
+        get_string('workflow_review', 'mod_kanban'),
         get_string('dashboard_remaining', 'mod_kanban'),
         get_string('dashboard_expired', 'mod_kanban'),
     ]);
@@ -254,9 +273,9 @@ groups_print_activity_menu($cm, $CFG->wwwroot . '/mod/kanban/dashboard.php?id=' 
     </div>
     <?php endif; ?>
 
-    <!-- 4 Thẻ thống kê KPI -->
+    <!-- Các thẻ thống kê KPI theo workflow -->
     <div class="row g-3 mb-4">
-        <div class="col-md-3">
+        <div class="col-md-6 col-xl">
             <div class="card shadow-sm border-0 bg-primary text-white p-3 rounded">
                 <div class="d-flex justify-content-between align-items-center">
                     <div>
@@ -268,7 +287,7 @@ groups_print_activity_menu($cm, $CFG->wwwroot . '/mod/kanban/dashboard.php?id=' 
             </div>
         </div>
 
-        <div class="col-md-3">
+        <div class="col-md-6 col-xl">
             <div class="card shadow-sm border-0 bg-success text-white p-3 rounded">
                 <div class="d-flex justify-content-between align-items-center">
                     <div>
@@ -283,7 +302,7 @@ groups_print_activity_menu($cm, $CFG->wwwroot . '/mod/kanban/dashboard.php?id=' 
             </div>
         </div>
 
-        <div class="col-md-3">
+        <div class="col-md-6 col-xl">
             <div class="card shadow-sm border-0 bg-danger text-white p-3 rounded">
                 <div class="d-flex justify-content-between align-items-center">
                     <div>
@@ -295,7 +314,7 @@ groups_print_activity_menu($cm, $CFG->wwwroot . '/mod/kanban/dashboard.php?id=' 
             </div>
         </div>
 
-        <div class="col-md-3">
+        <div class="col-md-6 col-xl">
             <div class="card shadow-sm border-0 bg-warning text-dark p-3 rounded">
                 <div class="d-flex justify-content-between align-items-center">
                     <div>
@@ -303,6 +322,18 @@ groups_print_activity_menu($cm, $CFG->wwwroot . '/mod/kanban/dashboard.php?id=' 
                         <h2 class="mb-0 fw-bold"><?php echo $duesooncount; ?></h2>
                     </div>
                     <i class="fa fa-clock-o fa-3x opacity-50"></i>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-6 col-xl">
+            <div class="card shadow-sm border-0 bg-info text-white p-3 rounded">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <div class="text-white-50 small text-uppercase fw-bold"><?php echo get_string('dashboard_kpi_review', 'mod_kanban'); ?></div>
+                        <h2 class="mb-0 fw-bold"><?php echo $reviewcount; ?></h2>
+                    </div>
+                    <i class="fa fa-inbox fa-3x opacity-50"></i>
                 </div>
             </div>
         </div>
@@ -328,6 +359,50 @@ groups_print_activity_menu($cm, $CFG->wwwroot . '/mod/kanban/dashboard.php?id=' 
     </div>
     <?php endif; ?>
 
+    <!-- Danh sách bài học viên đã gửi để giáo viên duyệt -->
+    <div class="card shadow-sm border-0 mb-4">
+        <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+            <h5 class="card-title mb-0 fw-bold text-dark"><i class="fa fa-check-square-o text-info me-2"></i> <?php echo get_string('dashboard_review_title', 'mod_kanban'); ?></h5>
+            <span class="badge bg-info"><?php echo $reviewcount; ?></span>
+        </div>
+        <div class="card-body p-0"><div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light"><tr>
+                    <th><?php echo get_string('dashboard_th_card', 'mod_kanban'); ?></th>
+                    <th><?php echo get_string('dashboard_th_assignees', 'mod_kanban'); ?></th>
+                    <th><?php echo get_string('submissionurl', 'mod_kanban'); ?></th>
+                    <th><?php echo get_string('submissionfile', 'mod_kanban'); ?></th>
+                    <th><?php echo get_string('updatedat', 'mod_kanban'); ?></th>
+                    <th><?php echo get_string('dashboard_action', 'mod_kanban'); ?></th>
+                </tr></thead>
+                <tbody>
+                <?php if (empty($reviewlist)): ?>
+                    <tr><td colspan="6" class="text-center py-4 text-muted"><?php echo get_string('dashboard_no_review', 'mod_kanban'); ?></td></tr>
+                <?php else: ?>
+                    <?php foreach ($reviewlist as $card): ?>
+                        <?php $submissionfiles = get_file_storage()->get_area_files($context->id, 'mod_kanban', 'submission_files', $card->id, 'filename', false); ?>
+                        <tr>
+                            <td class="fw-semibold"><?php echo format_string($card->title); ?></td>
+                            <td><?php echo s(kanban_get_card_assignee_names($card->id)); ?></td>
+                            <td><?php if (!empty($card->submission_url)): ?><a href="<?php echo s($card->submission_url); ?>" target="_blank" rel="noopener noreferrer"><?php echo get_string('dashboard_open_submission', 'mod_kanban'); ?></a><?php else: ?>—<?php endif; ?></td>
+                            <td>
+                                <?php if (empty($submissionfiles)): ?>—<?php else: ?>
+                                    <?php foreach ($submissionfiles as $submissionfile): ?>
+                                        <?php $fileurl = moodle_url::make_pluginfile_url($context->id, 'mod_kanban', 'submission_files', $card->id, $submissionfile->get_filepath(), $submissionfile->get_filename(), false); ?>
+                                        <a class="d-block" href="<?php echo $fileurl->out(false); ?>" target="_blank"><?php echo s($submissionfile->get_filename()); ?></a>
+                                    <?php endforeach; ?>
+                                <?php endif; ?>
+                            </td>
+                            <td><?php echo userdate($card->timemodified); ?></td>
+                            <td><a class="btn btn-sm btn-primary" href="<?php echo (new moodle_url('/mod/kanban/view.php', ['id' => $cm->id, 'group' => $card->groupid, 'cardid' => $card->id]))->out(false); ?>"><?php echo get_string('dashboard_review_action', 'mod_kanban'); ?></a></td>
+                        </tr>
+                    <?php endforeach; ?>
+                <?php endif; ?>
+                </tbody>
+            </table>
+        </div></div>
+    </div>
+
     <!-- Bảng mức độ đóng góp cá nhân -->
     <div class="card shadow-sm border-0 mb-4">
         <div class="card-header bg-white py-3">
@@ -341,6 +416,7 @@ groups_print_activity_menu($cm, $CFG->wwwroot . '/mod/kanban/dashboard.php?id=' 
                             <th><?php echo get_string('dashboard_th_member', 'mod_kanban'); ?></th>
                             <th><?php echo get_string('dashboard_th_tasks', 'mod_kanban'); ?></th>
                             <th><?php echo get_string('dashboard_th_done', 'mod_kanban'); ?></th>
+                            <th><?php echo get_string('dashboard_th_review', 'mod_kanban'); ?></th>
                             <th><?php echo get_string('dashboard_th_overdue', 'mod_kanban'); ?></th>
                             <th><?php echo get_string('dashboard_th_percent', 'mod_kanban'); ?></th>
                             <th><?php echo get_string('dashboard_th_progress', 'mod_kanban'); ?></th>
@@ -348,7 +424,7 @@ groups_print_activity_menu($cm, $CFG->wwwroot . '/mod/kanban/dashboard.php?id=' 
                     </thead>
                     <tbody>
                         <?php if (empty($userstats)): ?>
-                            <tr><td colspan="6" class="text-center py-4 text-muted"><?php echo get_string('dashboard_nodata', 'mod_kanban'); ?></td></tr>
+                            <tr><td colspan="7" class="text-center py-4 text-muted"><?php echo get_string('dashboard_nodata', 'mod_kanban'); ?></td></tr>
                         <?php else: ?>
                             <?php foreach ($userstats as $stat): ?>
                                 <?php $percent = ($totalassignments > 0) ? round(($stat['total'] / $totalassignments) * 100) : 0; ?>
@@ -356,6 +432,7 @@ groups_print_activity_menu($cm, $CFG->wwwroot . '/mod/kanban/dashboard.php?id=' 
                                     <td class="fw-semibold"><?php echo s($stat['name']); ?></td>
                                     <td><span class="badge bg-secondary"><?php echo $stat['total']; ?></span></td>
                                     <td><span class="badge bg-success"><?php echo $stat['done']; ?></span></td>
+                                    <td><span class="badge bg-info"><?php echo $stat['review']; ?></span></td>
                                     <td><span class="badge <?php echo $stat['overdue'] > 0 ? 'bg-danger' : 'bg-light text-dark'; ?>"><?php echo $stat['overdue']; ?></span></td>
                                     <td><?php echo $percent; ?>%</td>
                                     <td style="width: 25%;">

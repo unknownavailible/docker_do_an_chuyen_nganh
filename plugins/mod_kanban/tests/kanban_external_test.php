@@ -116,7 +116,7 @@ class mod_kanban_external_testcase extends advanced_testcase {
         $this->assertSame((int) $column2->id, (int) $updated->columnid);
     }
 
-    public function test_student_in_multiple_course_groups_cannot_create_kanban_card(): void {
+    public function test_student_cannot_create_teacher_assignment_card(): void {
         [$course, $teacher, $studenta, $studentb, $groupa, $groupb, $cm, $column1, $column2] = $this->create_kanban_data();
         global $SESSION;
 
@@ -124,8 +124,7 @@ class mod_kanban_external_testcase extends advanced_testcase {
         $this->setUser($studenta);
         $SESSION->activegroup[$course->id][SEPARATEGROUPS][0] = $groupa->id;
 
-        $this->expectException(moodle_exception::class);
-        $this->expectExceptionMessage(get_string('error_multiple_groups', 'mod_kanban'));
+        $this->expectException(required_capability_exception::class);
         \mod_kanban\external\card_api::create_card(
             $cm->instance,
             $column1->id,
@@ -141,8 +140,9 @@ class mod_kanban_external_testcase extends advanced_testcase {
         [$course, $teacher, $studenta, $studentb, $groupa, $groupb, $cm, $column1, $column2] = $this->create_kanban_data();
         global $DB, $SESSION;
 
-        $this->setUser($studenta);
+        $this->setUser($teacher);
         $SESSION->activegroup[$course->id][SEPARATEGROUPS][0] = $groupa->id;
+        $SESSION->activegroup[$course->id]['aag'][0] = $groupa->id;
         $DB->set_field('kanban_columns', 'wip_limit', 1, ['id' => $column1->id]);
 
         $DB->insert_record('kanban_cards', (object)[
@@ -334,7 +334,7 @@ class mod_kanban_external_testcase extends advanced_testcase {
         $file = get_file_storage()->create_file_from_string([
             'contextid' => $context->id,
             'component' => 'mod_kanban',
-            'filearea' => 'card_attachments',
+            'filearea' => 'submission_files',
             'itemid' => $cardid,
             'userid' => $studenta->id,
             'filepath' => '/',
@@ -345,6 +345,7 @@ class mod_kanban_external_testcase extends advanced_testcase {
         $this->assertCount(1, $result['files']);
         $this->assertSame('attachment.txt', $result['files'][0]['filename']);
         $this->assertSame($file->get_pathnamehash(), $result['files'][0]['hash']);
+        $this->assertTrue($result['files'][0]['candelete']);
 
         $delete = \mod_kanban\external\card_api::delete_card_file(
             $cardid,
@@ -355,7 +356,7 @@ class mod_kanban_external_testcase extends advanced_testcase {
         $this->assertFalse(get_file_storage()->file_exists(
             $context->id,
             'mod_kanban',
-            'card_attachments',
+            'submission_files',
             $cardid,
             '/',
             'attachment.txt'
@@ -366,8 +367,9 @@ class mod_kanban_external_testcase extends advanced_testcase {
         [$course, $teacher, $studenta, $studentb, $groupa, $groupb, $cm, $column1, $column2] = $this->create_kanban_data();
         global $DB, $SESSION, $COURSE, $CFG;
 
-        $this->setUser($studenta);
+        $this->setUser($teacher);
         $SESSION->activegroup[$course->id][SEPARATEGROUPS][0] = $groupa->id;
+        $SESSION->activegroup[$course->id]['aag'][0] = $groupa->id;
         $cardid = $DB->insert_record('kanban_cards', (object)[
             'kanbanid' => $cm->instance,
             'columnid' => $column1->id,
@@ -599,11 +601,14 @@ class mod_kanban_external_testcase extends advanced_testcase {
         [$course, $teacher, $studenta, $studentb, $groupa, $groupb, $cm, $column1, $column2] = $this->create_kanban_data();
         global $DB, $SESSION;
 
-        $this->setUser($studenta);
+        $this->setUser($teacher);
         $SESSION->activegroup[$course->id][SEPARATEGROUPS][0] = $groupa->id;
+        $SESSION->activegroup[$course->id]['aag'][0] = $groupa->id;
 
         $future = time() + 86400;
-        $result = \mod_kanban\external\card_api::create_card($cm->instance, $column1->id, $cm->id, 'Deadline card', 'Future due date', $future, '');
+        $result = \mod_kanban\external\card_api::create_card(
+            $cm->instance, $column1->id, $cm->id, 'Deadline card', 'Future due date', $future, '', [$studenta->id]
+        );
         $this->assertTrue($result['status']);
 
         $savedcard = $DB->get_record('kanban_cards', ['id' => $result['cardid']], '*', MUST_EXIST);
@@ -624,5 +629,40 @@ class mod_kanban_external_testcase extends advanced_testcase {
 
         $pastcard = $DB->get_record('kanban_cards', ['id' => $pastcardid], '*', MUST_EXIST);
         $this->assertTrue((int) $pastcard->duedate < time());
+    }
+
+    public function test_assignee_can_submit_for_review_but_cannot_teacher_approve(): void {
+        [$course, $teacher, $studenta, $studentb, $groupa, $groupb, $cm, $column1] = $this->create_kanban_data();
+        global $DB, $SESSION;
+
+        $cardid = $DB->insert_record('kanban_cards', (object)[
+            'kanbanid' => $cm->instance,
+            'columnid' => $column1->id,
+            'groupid' => $groupa->id,
+            'creatorid' => $teacher->id,
+            'title' => 'Teacher assignment',
+            'description' => '',
+            'assigned_to' => $studenta->id,
+            'duedate' => time() + DAYSECS,
+            'sortorder' => 0,
+            'submission_url' => '',
+            'workflow_state' => 'notstarted',
+            'timecreated' => time(),
+            'timemodified' => time(),
+        ]);
+        kanban_set_card_assignees($cardid, [$studenta->id]);
+        $this->setUser($studenta);
+        $SESSION->activegroup[$course->id][SEPARATEGROUPS][0] = $groupa->id;
+
+        $result = \mod_kanban\external\card_api::update_progress(
+            $cardid, $cm->id, 'review', 'https://example.test/submission'
+        );
+        $this->assertTrue($result['status']);
+        $card = $DB->get_record('kanban_cards', ['id' => $cardid], '*', MUST_EXIST);
+        $this->assertSame('review', $card->workflow_state);
+        $this->assertSame('https://example.test/submission', $card->submission_url);
+
+        $this->expectException(required_capability_exception::class);
+        \mod_kanban\external\card_api::update_progress($cardid, $cm->id, 'completed', $card->submission_url);
     }
 }

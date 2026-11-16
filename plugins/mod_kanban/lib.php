@@ -303,6 +303,7 @@ function kanban_delete_instance($id) {
         $context = context_module::instance($cm->id);
         $fs->delete_area_files($context->id, 'mod_kanban', 'intro', 0);
         $fs->delete_area_files($context->id, 'mod_kanban', 'card_attachments');
+        $fs->delete_area_files($context->id, 'mod_kanban', 'submission_files');
     }
 
     $cardids = $DB->get_fieldset_select('kanban_cards', 'id', 'kanbanid = :kanbanid', ['kanbanid' => $id]);
@@ -425,6 +426,33 @@ function kanban_validate_and_get_card($cardid, $cm, $kanban, $requiredcapability
     return $card;
 }
 
+/** Whether the current user may update progress/submission data for a card. */
+function kanban_can_update_card_progress($card, $cm, $context = null) {
+    global $USER;
+    $context = $context ?: context_module::instance($cm->id);
+    if (has_capability('mod/kanban:managecards', $context)) {
+        return true;
+    }
+    if (!has_capability('mod/kanban:updateprogress', $context) ||
+            !kanban_user_has_group_access($cm, $card->groupid, $context)) {
+        return false;
+    }
+    $assignees = kanban_get_card_assignee_ids($card->id);
+    return empty($assignees) || in_array((int)$USER->id, $assignees, true);
+}
+
+/** Whether the current user may remove a stored card file. */
+function kanban_can_delete_card_file($card, $file, $cm, $context = null) {
+    global $USER;
+    $context = $context ?: context_module::instance($cm->id);
+    if (has_capability('mod/kanban:managecards', $context)) {
+        return true;
+    }
+    return kanban_can_update_card_progress($card, $cm, $context) &&
+        $file->get_filearea() === 'submission_files' &&
+        (int)$file->get_userid() === (int)$USER->id;
+}
+
 function kanban_validate_and_get_column($columnid, $kanbanid, $cm, $requiredcapability = 'mod/kanban:managecards') {
     global $DB;
 
@@ -461,7 +489,7 @@ function kanban_check_wip_limit($column, $kanbanid, $groupid = 0) {
  * @param array $uploadedfiles PHP uploaded files structure.
  * @return int Number of saved files.
  */
-function kanban_save_card_attachments($cardid, $cm, array $uploadedfiles) {
+function kanban_save_card_attachments($cardid, $cm, array $uploadedfiles, $filearea = 'card_attachments') {
     global $USER;
 
     $context = context_module::instance($cm->id);
@@ -497,7 +525,7 @@ function kanban_save_card_attachments($cardid, $cm, array $uploadedfiles) {
             $fs->create_file_from_pathname([
                 'contextid' => $context->id,
                 'component' => 'mod_kanban',
-                'filearea' => 'card_attachments',
+                'filearea' => $filearea,
                 'itemid' => (int)$cardid,
                 'userid' => (int)$USER->id,
                 'filepath' => '/',
@@ -517,7 +545,7 @@ function kanban_get_accessible_card_attachment($course, $cm, $context, $filearea
         return false;
     }
 
-    if ($filearea !== 'card_attachments') {
+    if (!in_array($filearea, ['card_attachments', 'submission_files'], true)) {
         return false;
     }
 
@@ -539,7 +567,7 @@ function kanban_get_accessible_card_attachment($course, $cm, $context, $filearea
     return get_file_storage()->get_file(
         $context->id,
         'mod_kanban',
-        'card_attachments',
+        $filearea,
         $itemid,
         $filepath,
         $filename

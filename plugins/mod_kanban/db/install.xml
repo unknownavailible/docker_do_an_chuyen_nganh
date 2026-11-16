@@ -45,6 +45,7 @@
         <FIELD NAME="kanbanid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false" COMMENT="Thuộc kanban/course nào"/>
         <FIELD NAME="columnid" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false" COMMENT="Trạng thái Status (Todo/Doing/Done)"/>
         <FIELD NAME="groupid" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="creatorid" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false" COMMENT="User who created the task"/>
         <FIELD NAME="title" TYPE="char" LENGTH="255" NOTNULL="true" SEQUENCE="false"/>
         <FIELD NAME="description" TYPE="text" NOTNULL="false" SEQUENCE="false"/>
         <FIELD NAME="assigned_to" TYPE="int" LENGTH="10" NOTNULL="false" DEFAULT="0" SEQUENCE="false" COMMENT="student_id thực hiện"/>
@@ -54,6 +55,8 @@
         <FIELD NAME="time_allocated" TYPE="int" LENGTH="10" NOTNULL="false" DEFAULT="0" SEQUENCE="false" COMMENT="Thời gian dự kiến (phút)"/>
         <FIELD NAME="time_spent" TYPE="int" LENGTH="10" NOTNULL="false" DEFAULT="0" SEQUENCE="false" COMMENT="Thời gian thực tế làm (phút)"/>
         <FIELD NAME="task_url" TYPE="char" LENGTH="255" NOTNULL="false" SEQUENCE="false" COMMENT="Link mở chi tiết bên ngoài"/>
+        <FIELD NAME="submission_url" TYPE="char" LENGTH="255" NOTNULL="false" SEQUENCE="false" COMMENT="Learner submission URL"/>
+        <FIELD NAME="workflow_state" TYPE="char" LENGTH="20" NOTNULL="true" DEFAULT="notstarted" SEQUENCE="false" COMMENT="notstarted, inprogress, review, completed"/>
         <FIELD NAME="timecreated" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
         <FIELD NAME="timemodified" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
       </FIELDS>

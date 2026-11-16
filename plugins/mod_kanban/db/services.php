@@ -96,4 +96,11 @@ $functions = [
         'type' => 'write',
         'ajax' => true,
     ],
+    'mod_kanban_update_progress' => [
+        'classname' => 'mod_kanban\\external\\card_api',
+        'methodname' => 'update_progress',
+        'description' => 'Cập nhật tiến độ và URL bài làm',
+        'type' => 'write',
+        'ajax' => true,
+    ],
 ];

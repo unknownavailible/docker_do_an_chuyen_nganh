@@ -11,7 +11,7 @@ define(['core/ajax', 'core/notification'], function(ajax, notification) {
     }
 
     return {
-        init: function(cmid, kanbanid) {
+        init: function(cmid, kanbanid, autoOpenCardId, currentGroupId) {
             var draggedCard = null;
             var isDragging = false;
 
@@ -225,13 +225,16 @@ define(['core/ajax', 'core/notification'], function(ajax, notification) {
                     }
                     attachmentsEl.innerHTML = response.files.map(function(file) {
                         var deleteButton = '';
-                        deleteButton = '<button type="button" class="btn btn-link btn-sm text-danger p-0 ms-2 ' +
+                        if (file.candelete) {
+                            deleteButton = '<button type="button" class="btn btn-link btn-sm text-danger p-0 ms-2 ' +
                             'delete-card-file" data-filehash="' + escapeHtml(file.hash) + '" data-cardid="' +
                             cardId + '" title="' + getString('deletefile') + '"><i class="fa fa-trash"></i></button>';
+                        }
+                        var fileLabel = file.filearea === 'submission_files' ? getString('submissionfile') : getString('taskfile');
                         return '<div class="d-flex align-items-center justify-content-between border-bottom py-2">' +
                             '<a href="' + escapeHtml(file.url) + '" target="_blank" ' +
                             'class="text-primary text-decoration-underline me-2">' +
-                            escapeHtml(file.filename) + '</a><small class="text-muted">(' +
+                            escapeHtml(file.filename) + '</a><small class="text-muted">' + escapeHtml(fileLabel) + ' (' +
                             (file.size || 0) + ' bytes)</small>' + deleteButton + '</div>';
                     }).join('');
                 }).fail(function() {
@@ -271,16 +274,38 @@ define(['core/ajax', 'core/notification'], function(ajax, notification) {
                 document.getElementById('detail-card-status').textContent =
                     cardElement.dataset.columntitle || getString('unknown');
 
-                // Show or hide the submission link.
-                var submissionUrl = cardElement.dataset.submissionurl;
+                document.getElementById('detail-card-creator').textContent = cardElement.dataset.creator || getString('unknown');
+                document.getElementById('detail-card-created').textContent = cardElement.dataset.timecreated || '';
+                document.getElementById('detail-card-updated').textContent = cardElement.dataset.timemodified || '';
+
+                // Assignment material and learner submission links are deliberately separate.
+                var taskUrl = cardElement.dataset.taskurl;
                 var urlContainer = document.getElementById('detail-card-url-container');
                 var urlAnchor = document.getElementById('detail-card-url');
-                if (submissionUrl && submissionUrl.trim() !== '') {
-                    urlAnchor.href = submissionUrl;
-                    urlAnchor.textContent = submissionUrl;
+                if (taskUrl && taskUrl.trim() !== '') {
+                    urlAnchor.href = taskUrl;
+                    urlAnchor.textContent = taskUrl;
                     urlContainer.classList.remove('d-none');
                 } else {
                     urlContainer.classList.add('d-none');
+                }
+                var submissionUrl = cardElement.dataset.submissionurl;
+                var submissionContainer = document.getElementById('detail-submission-url-container');
+                var submissionAnchor = document.getElementById('detail-submission-url');
+                if (submissionUrl && submissionUrl.trim() !== '') {
+                    submissionAnchor.href = submissionUrl;
+                    submissionAnchor.textContent = submissionUrl;
+                    submissionContainer.classList.remove('d-none');
+                } else {
+                    submissionContainer.classList.add('d-none');
+                }
+                var workflowSelect = document.getElementById('detail-workflow-state');
+                if (workflowSelect) {
+                    workflowSelect.value = cardElement.dataset.workflowstate || 'notstarted';
+                }
+                var submissionInput = document.getElementById('detail-submission-url-input');
+                if (submissionInput) {
+                    submissionInput.value = submissionUrl || '';
                 }
 
                 var alertEl = document.getElementById('detail-card-alert');
@@ -378,7 +403,7 @@ define(['core/ajax', 'core/notification'], function(ajax, notification) {
                 document.getElementById('edit-card-desc-input').value = rawDesc ? rawDesc.textContent.trim() : '';
                 document.getElementById('edit-card-duedate-input').value =
                     timestampToDatetimeLocal(parseInt(cardElement.dataset.duedate || '0', 10));
-                document.getElementById('edit-card-url-input').value = cardElement.dataset.submissionurl || '';
+                document.getElementById('edit-card-url-input').value = cardElement.dataset.taskurl || '';
                 var selectedIds = (cardElement.dataset.assigneeids || '').split(',').map(function(s) {
                     return s.trim();
                 }).filter(function(s) {
@@ -559,6 +584,129 @@ define(['core/ajax', 'core/notification'], function(ajax, notification) {
             });
 
             document.addEventListener('click', function(e) {
+                var progressButton = e.target.closest && e.target.closest('#detail-progress-submit');
+                if (progressButton) {
+                    var progressCardId = parseInt(detailModal.dataset.cardid, 10);
+                    progressButton.disabled = true;
+                    ajax.call([{
+                        methodname: 'mod_kanban_update_progress',
+                        args: {
+                            cardid: progressCardId,
+                            cmid: parseInt(cmid, 10),
+                            workflowstate: document.getElementById('detail-workflow-state').value,
+                            submissionurl: document.getElementById('detail-submission-url-input').value.trim()
+                        }
+                    }])[0].done(function() {
+                        window.location.reload();
+                    }).fail(function(error) {
+                        document.getElementById('detail-action-message').textContent =
+                            (error && error.message) ? error.message : getString('errorgeneric');
+                        progressButton.disabled = false;
+                    });
+                    return;
+                }
+
+                var approveButton = e.target.closest && e.target.closest('#detail-approve');
+                if (approveButton) {
+                    approveButton.disabled = true;
+                    ajax.call([{
+                        methodname: 'mod_kanban_update_progress',
+                        args: {
+                            cardid: parseInt(detailModal.dataset.cardid, 10),
+                            cmid: parseInt(cmid, 10),
+                            workflowstate: 'completed',
+                            submissionurl: document.getElementById('detail-submission-url-input').value.trim()
+                        }
+                    }])[0].done(function() {
+                        window.location.href = M.cfg.wwwroot + '/mod/kanban/dashboard.php?id=' +
+                            parseInt(cmid, 10) + '&group=' + parseInt(currentGroupId || 0, 10);
+                    }).fail(function(error) {
+                        document.getElementById('detail-action-message').textContent =
+                            (error && error.message) ? error.message : getString('errorgeneric');
+                        approveButton.disabled = false;
+                    });
+                    return;
+                }
+
+                var revisionButton = e.target.closest && e.target.closest('#detail-request-revision');
+                if (revisionButton) {
+                    var feedbackInput = document.getElementById('detail-card-comment-input');
+                    var feedback = feedbackInput ? feedbackInput.value.trim() : '';
+                    if (!feedback) {
+                        document.getElementById('detail-action-message').textContent =
+                            getString('revisioncommentrequired');
+                        return;
+                    }
+                    revisionButton.disabled = true;
+                    ajax.call([{
+                        methodname: 'mod_kanban_add_comment',
+                        args: {
+                            cardid: parseInt(detailModal.dataset.cardid, 10),
+                            cmid: parseInt(cmid, 10),
+                            comment: feedback
+                        }
+                    }])[0].done(function() {
+                        ajax.call([{
+                            methodname: 'mod_kanban_update_progress',
+                            args: {
+                                cardid: parseInt(detailModal.dataset.cardid, 10),
+                                cmid: parseInt(cmid, 10),
+                                workflowstate: 'inprogress',
+                                submissionurl: document.getElementById('detail-submission-url-input').value.trim()
+                            }
+                        }])[0].done(function() {
+                            window.location.href = M.cfg.wwwroot + '/mod/kanban/dashboard.php?id=' +
+                                parseInt(cmid, 10) + '&group=' + parseInt(currentGroupId || 0, 10);
+                        }).fail(notification.exception);
+                    }).fail(function(error) {
+                        document.getElementById('detail-action-message').textContent =
+                            (error && error.message) ? error.message : getString('errorgeneric');
+                        revisionButton.disabled = false;
+                    });
+                    return;
+                }
+
+                var uploadButton = e.target.closest && e.target.closest(
+                    '#detail-submission-file-submit, #detail-task-file-submit'
+                );
+                if (uploadButton) {
+                    var fileInput = document.getElementById('detail-file-input');
+                    var message = document.getElementById('detail-action-message');
+                    if (!fileInput.files.length) {
+                        message.textContent = getString('error_upload_empty');
+                        return;
+                    }
+                    var uploadData = new FormData();
+                    uploadData.append('cmid', cmid);
+                    uploadData.append('cardid', detailModal.dataset.cardid);
+                    uploadData.append('kind', uploadButton.id === 'detail-task-file-submit' ? 'task' : 'submission');
+                    uploadData.append('sesskey', M.cfg.sesskey);
+                    Array.from(fileInput.files).forEach(function(file) {
+                        uploadData.append('attachments[]', file);
+                    });
+                    uploadButton.disabled = true;
+                    fetch(M.cfg.wwwroot + '/mod/kanban/upload_card_file.php', {
+                        method: 'POST', body: uploadData, credentials: 'same-origin'
+                    }).then(function(response) {
+                        return response.json().then(function(data) {
+                            if (!response.ok || !data.status) {
+                                throw new Error(data.message || getString('errorgeneric'));
+                            }
+                            return data;
+                        });
+                    }).then(function() {
+                        var detailCard = document.querySelector('.kanban-card[data-cardid="' +
+                            detailModal.dataset.cardid + '"]');
+                        fileInput.value = '';
+                        openDetailModal(detailCard);
+                    }).catch(function(error) {
+                        message.textContent = error.message || getString('errorgeneric');
+                    }).finally(function() {
+                        uploadButton.disabled = false;
+                    });
+                    return;
+                }
+
                 var deleteFileBtn = e.target.closest && e.target.closest('.delete-card-file');
                 if (!deleteFileBtn) {
                     return;
@@ -668,7 +816,12 @@ define(['core/ajax', 'core/notification'], function(ajax, notification) {
                         duedateTimestamp = Math.floor(selectedDate.getTime() / 1000);
                     }
 
-                    var submissionUrl = document.getElementById('card-url-input').value.trim();
+                    if (!duedateStr || !assigneeIds.length) {
+                        errorAlert.innerText = getString('error_assignment_fields_required');
+                        errorAlert.classList.remove('d-none');
+                        return;
+                    }
+                    var taskUrl = document.getElementById('card-url-input').value.trim();
                     var formData = new FormData();
                     formData.append('kanbanid', kanbanid);
                     formData.append('columnid', columnId);
@@ -676,7 +829,7 @@ define(['core/ajax', 'core/notification'], function(ajax, notification) {
                     formData.append('title', title);
                     formData.append('description', desc);
                     formData.append('duedate', duedateTimestamp);
-                    formData.append('submissionurl', submissionUrl);
+                    formData.append('taskurl', taskUrl);
                     formData.append('sesskey', M.cfg.sesskey);
                     assigneeIds.forEach(function(assigneeId) {
                         formData.append('assignees[]', assigneeId);
@@ -687,6 +840,9 @@ define(['core/ajax', 'core/notification'], function(ajax, notification) {
                         });
                     }
 
+                    var submitButton = document.getElementById('btn-submit-card');
+                    submitButton.disabled = true;
+                    submitButton.setAttribute('aria-busy', 'true');
                     fetch(M.cfg.wwwroot + '/mod/kanban/upload_and_create_card.php', {
                         method: 'POST',
                         body: formData,
@@ -713,6 +869,9 @@ define(['core/ajax', 'core/notification'], function(ajax, notification) {
                     }).catch(function(error) {
                         errorAlert.innerText = error.message || getString('errorgeneric');
                         errorAlert.classList.remove('d-none');
+                    }).finally(function() {
+                        submitButton.disabled = false;
+                        submitButton.removeAttribute('aria-busy');
                     });
                 });
             }
@@ -842,6 +1001,17 @@ define(['core/ajax', 'core/notification'], function(ajax, notification) {
                     }
                 });
             });
+
+            // Dashboard deep link: open the requested card detail after all handlers are ready.
+            if (autoOpenCardId) {
+                var autoOpenCard = document.querySelector(
+                    '.kanban-card[data-cardid="' + parseInt(autoOpenCardId, 10) + '"]'
+                );
+                if (autoOpenCard) {
+                    autoOpenCard.scrollIntoView({behavior: 'smooth', block: 'center'});
+                    openDetailModal(autoOpenCard);
+                }
+            }
         }
     };
 });

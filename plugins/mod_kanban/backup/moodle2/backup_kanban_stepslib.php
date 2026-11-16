@@ -16,9 +16,9 @@ class backup_kanban_activity_structure_step extends backup_activity_structure_st
 
         $cards = new backup_nested_element('cards');
         $card = new backup_nested_element('card', ['id'], [
-            'kanbanid', 'columnid', 'groupid', 'title', 'description', 'assigned_to',
+            'kanbanid', 'columnid', 'groupid', 'creatorid', 'title', 'description', 'assigned_to',
             'duedate', 'sortorder', 'time_allocated', 'time_spent', 'task_url',
-            'timecreated', 'timemodified'
+            'submission_url', 'workflow_state', 'timecreated', 'timemodified'
         ]);
 
         $assignees = new backup_nested_element('assignees');
@@ -62,6 +62,7 @@ class backup_kanban_activity_structure_step extends backup_activity_structure_st
 
         $kanban->annotate_files('mod_kanban', 'intro', null);
         $card->annotate_files('mod_kanban', 'card_attachments', 'id');
+        $card->annotate_files('mod_kanban', 'submission_files', 'id');
 
         return $this->prepare_activity_structure($kanban);
     }

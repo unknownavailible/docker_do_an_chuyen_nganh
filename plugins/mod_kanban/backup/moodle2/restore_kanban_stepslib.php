@@ -52,6 +52,7 @@ class restore_kanban_activity_structure_step extends restore_activity_structure_
         $data->columnid = $this->get_mappingid('kanban_column', $data->columnid);
         $data->groupid = $this->map_groupid($data->groupid);
         $data->assigned_to = $this->map_userid($data->assigned_to);
+        $data->creatorid = $this->map_userid($data->creatorid ?? 0);
         $newid = $DB->insert_record('kanban_cards', $data);
         $this->set_mapping('kanban_card', $oldid, $newid, true);
     }
@@ -120,5 +121,6 @@ class restore_kanban_activity_structure_step extends restore_activity_structure_
     protected function after_execute() {
         $this->add_related_files('mod_kanban', 'intro', null);
         $this->add_related_files('mod_kanban', 'card_attachments', 'kanban_card');
+        $this->add_related_files('mod_kanban', 'submission_files', 'kanban_card');
     }
 }

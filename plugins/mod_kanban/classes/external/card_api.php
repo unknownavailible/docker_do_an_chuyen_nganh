@@ -42,12 +42,15 @@ class card_api extends \core_external\external_api {
         require_login($course, false, $cm);
         $context = context_module::instance($cm->id);
         self::validate_context($context);
-        require_capability('mod/kanban:managecards', $context);
+        require_capability('mod/kanban:updateprogress', $context);
         // Sesskey do framework (lib/ajax/service.php) kiểm tra; không gọi ở đây để WS token hoạt động.
 
         $kanban = $DB->get_record('kanban', ['id' => $cm->instance], '*', MUST_EXIST);
-        $card = kanban_validate_and_get_card($params['cardid'], $cm, $kanban, 'mod/kanban:managecards');
-        $targetcolumn = kanban_validate_and_get_column($params['targetcolumnid'], $kanban->id, $cm, 'mod/kanban:managecards');
+        $card = kanban_validate_and_get_card($params['cardid'], $cm, $kanban, 'mod/kanban:updateprogress');
+        if (!kanban_can_update_card_progress($card, $cm, $context)) {
+            throw new \required_capability_exception($context, 'mod/kanban:updateprogress', 'nopermissions', '');
+        }
+        $targetcolumn = kanban_validate_and_get_column($params['targetcolumnid'], $kanban->id, $cm, 'mod/kanban:updateprogress');
 
         $oldcolumnid = (int)$card->columnid;
         if ($oldcolumnid !== (int)$targetcolumn->id &&
@@ -184,15 +187,21 @@ class card_api extends \core_external\external_api {
         }
 
         $assigneeids = kanban_validate_assignee_list($cm, $params['assignees']);
+        if ($params['duedate'] <= 0 || empty($assigneeids)) {
+            throw new \moodle_exception('error_assignment_fields_required', 'mod_kanban');
+        }
 
         $card = new stdClass();
         $card->kanbanid = $params['kanbanid'];
         $card->columnid = $params['columnid'];
         $card->groupid = $currentgroup ? $currentgroup : 0;
+        $card->creatorid = (int)$USER->id;
         $card->title = $title;
         $card->description = $params['description'];
         $card->duedate = $params['duedate'];
         $card->task_url = $params['submissionurl'];
+        $card->submission_url = '';
+        $card->workflow_state = 'notstarted';
         $card->assigned_to = !empty($assigneeids) ? (int) $assigneeids[0] : 0;
         $maxorder = $DB->get_field_sql(
             'SELECT MAX(sortorder) FROM {kanban_cards} WHERE kanbanid = :kanbanid AND columnid = :columnid AND groupid = :groupid',
@@ -343,6 +352,7 @@ class card_api extends \core_external\external_api {
         // Dọn dữ liệu con + file đính kèm để không orphan (như kanban_delete_instance()).
         $fs = get_file_storage();
         $fs->delete_area_files($context->id, 'mod_kanban', 'card_attachments', $deletedcardid);
+        $fs->delete_area_files($context->id, 'mod_kanban', 'submission_files', $deletedcardid);
         $DB->delete_records('kanban_card_assignees', ['cardid' => $deletedcardid]);
         $DB->delete_records('kanban_card_comments', ['cardid' => $deletedcardid]);
         $DB->delete_records('kanban_card_history', ['cardid' => $deletedcardid]);
@@ -384,7 +394,10 @@ class card_api extends \core_external\external_api {
         $card = kanban_validate_and_get_card($params['cardid'], $cm, $kanban, 'mod/kanban:view');
 
         $fs = get_file_storage();
-        $files = $fs->get_area_files($context->id, 'mod_kanban', 'card_attachments', $card->id, 'filename', false);
+        $files = array_merge(
+            array_values($fs->get_area_files($context->id, 'mod_kanban', 'card_attachments', $card->id, 'filename', false)),
+            array_values($fs->get_area_files($context->id, 'mod_kanban', 'submission_files', $card->id, 'filename', false))
+        );
 
         $result = [];
         foreach ($files as $file) {
@@ -396,10 +409,12 @@ class card_api extends \core_external\external_api {
                 'filename' => $file->get_filename(),
                 'size' => $file->get_filesize(),
                 'hash' => $file->get_pathnamehash(),
+                'filearea' => $file->get_filearea(),
+                'candelete' => kanban_can_delete_card_file($card, $file, $cm, $context),
                 'url' => \moodle_url::make_pluginfile_url(
                     $context->id,
                     'mod_kanban',
-                    'card_attachments',
+                    $file->get_filearea(),
                     $card->id,
                     '/',
                     $file->get_filename(),
@@ -419,6 +434,8 @@ class card_api extends \core_external\external_api {
                     'filename' => new \core_external\external_value(PARAM_TEXT, 'Tên file'),
                     'size' => new \core_external\external_value(PARAM_INT, 'Kích thước file'),
                     'hash' => new \core_external\external_value(PARAM_TEXT, 'Hash file'),
+                    'filearea' => new \core_external\external_value(PARAM_ALPHAEXT, 'File area'),
+                    'candelete' => new \core_external\external_value(PARAM_BOOL, 'May current user delete'),
                     'url' => new \core_external\external_value(PARAM_URL, 'URL file'),
                 ])
             )
@@ -441,17 +458,21 @@ class card_api extends \core_external\external_api {
         require_login($course, false, $cm);
         $context = context_module::instance($cm->id);
         self::validate_context($context);
-        require_capability('mod/kanban:managecards', $context);
+        require_capability('mod/kanban:updateprogress', $context);
         // Sesskey do framework (lib/ajax/service.php) kiểm tra; không gọi ở đây để WS token hoạt động.
 
         $kanban = $DB->get_record('kanban', ['id' => $cm->instance], '*', MUST_EXIST);
-        $card = kanban_validate_and_get_card($params['cardid'], $cm, $kanban, 'mod/kanban:managecards');
+        $card = kanban_validate_and_get_card($params['cardid'], $cm, $kanban, 'mod/kanban:updateprogress');
 
         $fs = get_file_storage();
         $file = $fs->get_file_by_hash($params['filehash']);
         if (!$file || (int)$file->get_itemid() !== (int)$card->id ||
-                (int)$file->get_contextid() !== (int)$context->id) {
+                (int)$file->get_contextid() !== (int)$context->id ||
+                !in_array($file->get_filearea(), ['card_attachments', 'submission_files'], true)) {
             throw new \moodle_exception('filenotfound', 'error');
+        }
+        if (!kanban_can_delete_card_file($card, $file, $cm, $context)) {
+            throw new \required_capability_exception($context, 'mod/kanban:updateprogress', 'nopermissions', '');
         }
 
         $file->delete();
@@ -611,10 +632,13 @@ class card_api extends \core_external\external_api {
         require_login($course, false, $cm);
         $context = context_module::instance($cm->id);
         self::validate_context($context);
-        require_capability('mod/kanban:managecards', $context);
+        require_capability('mod/kanban:updateprogress', $context);
         // Sesskey do framework (lib/ajax/service.php) kiểm tra; không gọi ở đây để WS token hoạt động.
         $kanban = $DB->get_record('kanban', ['id' => $cm->instance], '*', MUST_EXIST);
-        $card = kanban_validate_and_get_card($params['cardid'], $cm, $kanban, 'mod/kanban:managecards');
+        $card = kanban_validate_and_get_card($params['cardid'], $cm, $kanban, 'mod/kanban:updateprogress');
+        if (!kanban_can_update_card_progress($card, $cm, $context)) {
+            throw new \required_capability_exception($context, 'mod/kanban:updateprogress', 'nopermissions', '');
+        }
 
         if (!$DB->get_manager()->table_exists('kanban_card_comments')) {
             throw new \moodle_exception('modulerequiresupgrade', 'mod_kanban');
@@ -639,6 +663,56 @@ class card_api extends \core_external\external_api {
         return new \core_external\external_single_structure([
             'status' => new \core_external\external_value(PARAM_BOOL),
             'message' => new \core_external\external_value(PARAM_TEXT, 'Thông báo', VALUE_DEFAULT, '')
+        ]);
+    }
+
+    public static function update_progress_parameters() {
+        return new external_function_parameters([
+            'cardid' => new external_value(PARAM_INT, 'Card ID'),
+            'cmid' => new external_value(PARAM_INT, 'Course module ID'),
+            'workflowstate' => new external_value(PARAM_ALPHA, 'Workflow state'),
+            'submissionurl' => new external_value(PARAM_URL, 'Learner submission URL', VALUE_DEFAULT, ''),
+        ]);
+    }
+
+    public static function update_progress($cardid, $cmid, $workflowstate, $submissionurl = '') {
+        global $DB;
+        $params = self::validate_parameters(self::update_progress_parameters(), compact(
+            'cardid', 'cmid', 'workflowstate', 'submissionurl'
+        ));
+        $cm = get_coursemodule_from_id('kanban', $params['cmid'], 0, false, MUST_EXIST);
+        $course = get_course($cm->course);
+        require_login($course, false, $cm);
+        $context = context_module::instance($cm->id);
+        self::validate_context($context);
+        require_capability('mod/kanban:updateprogress', $context);
+        $kanban = $DB->get_record('kanban', ['id' => $cm->instance], '*', MUST_EXIST);
+        $card = kanban_validate_and_get_card($params['cardid'], $cm, $kanban, 'mod/kanban:updateprogress');
+        if (!kanban_can_update_card_progress($card, $cm, $context)) {
+            throw new \required_capability_exception($context, 'mod/kanban:updateprogress', 'nopermissions', '');
+        }
+
+        $allowed = ['notstarted', 'inprogress', 'review', 'completed'];
+        if (!in_array($params['workflowstate'], $allowed, true)) {
+            throw new \invalid_parameter_exception('Invalid workflow state');
+        }
+        // Completion is a teacher approval. Learners submit for review instead.
+        if ($params['workflowstate'] === 'completed' && !has_capability('mod/kanban:managecards', $context)) {
+            throw new \required_capability_exception($context, 'mod/kanban:managecards', 'nopermissions', '');
+        }
+        $card->workflow_state = $params['workflowstate'];
+        $card->submission_url = $params['submissionurl'];
+        $card->timemodified = time();
+        $DB->update_record('kanban_cards', $card);
+        kanban_log_card_change($card->id, 'progress', get_string('history_progress_' . $params['workflowstate'], 'mod_kanban'));
+        kanban_notify_card_assignees($card, $cm, 'updated');
+        return ['status' => true, 'message' => get_string('msg_progress_updated', 'mod_kanban')];
+    }
+
+    public static function update_progress_returns() {
+        return new external_single_structure([
+            'status' => new external_value(PARAM_BOOL),
+            'message' => new external_value(PARAM_TEXT),
         ]);
     }
 

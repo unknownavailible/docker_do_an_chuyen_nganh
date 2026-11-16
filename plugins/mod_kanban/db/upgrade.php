@@ -113,5 +113,61 @@ function xmldb_kanban_upgrade($oldversion) {
         upgrade_mod_savepoint(true, 2026091605, 'kanban');
     }
 
+    if ($oldversion < 2026111600) {
+        $table = new xmldb_table('kanban_cards');
+        $fields = [
+            new xmldb_field('creatorid', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, 0, 'groupid'),
+            new xmldb_field('submission_url', XMLDB_TYPE_CHAR, '255', null, null, null, null, 'task_url'),
+            new xmldb_field('workflow_state', XMLDB_TYPE_CHAR, '20', null, XMLDB_NOTNULL, null, 'notstarted', 'submission_url'),
+        ];
+        foreach ($fields as $field) {
+            if (!$dbman->field_exists($table, $field)) {
+                $dbman->add_field($table, $field);
+            }
+        }
+
+        // Preserve the meaning of legacy cards that were already in the final column.
+        foreach ($DB->get_records('kanban', null, '', 'id') as $kanban) {
+            $lastcolumns = $DB->get_records(
+                'kanban_columns', ['kanbanid' => $kanban->id], 'sortorder DESC, id DESC', '*', 0, 1
+            );
+            $lastcolumn = reset($lastcolumns);
+            if ($lastcolumn) {
+                $DB->set_field('kanban_cards', 'workflow_state', 'completed', [
+                    'kanbanid' => $kanban->id,
+                    'columnid' => $lastcolumn->id,
+                ]);
+            }
+        }
+
+        // Remove the legacy broad student grant. New installs never receive it.
+        $studentroles = $DB->get_records('role', ['archetype' => 'student'], '', 'id');
+        foreach ($studentroles as $studentrole) {
+            $DB->delete_records('role_capabilities', [
+                'roleid' => $studentrole->id,
+                'capability' => 'mod/kanban:managecards',
+            ]);
+        }
+        upgrade_mod_savepoint(true, 2026111600, 'kanban');
+    }
+
+    if ($oldversion < 2026111601) {
+        // The workflow-aware dashboard must keep legacy final-column cards completed.
+        foreach ($DB->get_records('kanban', null, '', 'id') as $kanban) {
+            $lastcolumns = $DB->get_records(
+                'kanban_columns', ['kanbanid' => $kanban->id], 'sortorder DESC, id DESC', '*', 0, 1
+            );
+            $lastcolumn = reset($lastcolumns);
+            if ($lastcolumn) {
+                $DB->set_field('kanban_cards', 'workflow_state', 'completed', [
+                    'kanbanid' => $kanban->id,
+                    'columnid' => $lastcolumn->id,
+                    'workflow_state' => 'notstarted',
+                ]);
+            }
+        }
+        upgrade_mod_savepoint(true, 2026111601, 'kanban');
+    }
+
     return true;
 }

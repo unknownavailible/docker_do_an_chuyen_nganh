@@ -10,7 +10,7 @@ $cmid = optional_param('cmid', 0, PARAM_INT);
 $title = optional_param('title', '', PARAM_TEXT);
 $description = optional_param('description', '', PARAM_RAW);
 $duedate = optional_param('duedate', 0, PARAM_INT);
-$submissionurl = optional_param('submissionurl', '', PARAM_URL);
+$taskurl = optional_param('taskurl', optional_param('submissionurl', '', PARAM_URL), PARAM_URL);
 $assignees = optional_param_array('assignees', [], PARAM_INT);
 
 if (!$cmid) {
@@ -62,16 +62,34 @@ if ($title === '') {
     exit;
 }
 
+if ($duedate <= 0 || empty($assignees)) {
+    echo json_encode(['status' => false, 'message' => get_string('error_assignment_fields_required', 'mod_kanban')]);
+    exit;
+}
+
+foreach ($_FILES as $upload) {
+    $errors = is_array($upload['error'] ?? null) ? $upload['error'] : [$upload['error'] ?? UPLOAD_ERR_NO_FILE];
+    foreach ($errors as $error) {
+        if (!in_array((int)$error, [UPLOAD_ERR_OK, UPLOAD_ERR_NO_FILE], true)) {
+            echo json_encode(['status' => false, 'message' => get_string('error_upload_failed', 'mod_kanban', (int)$error)]);
+            exit;
+        }
+    }
+}
+
 global $DB, $USER;
 
 $card = new stdClass();
 $card->kanbanid = $kanbanid;
 $card->columnid = $columnid;
 $card->groupid = $currentgroup ?: 0;
+$card->creatorid = (int)$USER->id;
 $card->title = $title;
 $card->description = $description;
 $card->duedate = $duedate;
-$card->task_url = $submissionurl;
+$card->task_url = $taskurl;
+$card->submission_url = '';
+$card->workflow_state = 'notstarted';
 $assigneeids = kanban_validate_assignee_list($cm, $assignees);
 $card->assigned_to = !empty($assigneeids) ? (int)$assigneeids[0] : 0;
 $maxorder = $DB->get_field_sql(

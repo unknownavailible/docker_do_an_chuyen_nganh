@@ -61,6 +61,8 @@ class provider implements
         ], 'privacy:metadata:kanban_members');
         $items->add_database_table('kanban_cards', [
             'assigned_to' => 'privacy:metadata:kanban_cards:assigned_to',
+            'creatorid' => 'privacy:metadata:kanban_cards:creatorid',
+            'submission_url' => 'privacy:metadata:kanban_cards:submission_url',
         ], 'privacy:metadata:kanban_cards');
         $items->add_database_table('kanban_card_assignees', [
             'userid' => 'privacy:metadata:kanban_card_assignees:userid',
@@ -110,7 +112,8 @@ class provider implements
                                 WHERE card.kanbanid = k.id AND kh.userid = :historyuserid)
                     OR EXISTS (SELECT 1 FROM {files} f
                                 WHERE f.contextid = c.id AND f.component = :filecomponent
-                                  AND f.filearea = :filearea AND f.userid = :fileuserid
+                                  AND (f.filearea = :filearea OR f.filearea = :submissionfilearea)
+                                  AND f.userid = :fileuserid
                                   AND f.filename <> :directoryfilename)";
         $params = [
             'contextlevel' => CONTEXT_MODULE,
@@ -123,6 +126,7 @@ class provider implements
             'historyuserid' => $userid,
             'filecomponent' => 'mod_kanban',
             'filearea' => 'card_attachments',
+            'submissionfilearea' => 'submission_files',
             'fileuserid' => $userid,
             'directoryfilename' => '.',
         ];
@@ -162,7 +166,8 @@ class provider implements
                        WHERE card.kanbanid = :historykanbanid
                 UNION SELECT userid FROM {files}
                        WHERE contextid = :filecontextid AND component = :filecomponent
-                         AND filearea = :filearea AND filename <> :directoryfilename AND userid > 0";
+                         AND (filearea = :filearea OR filearea = :submissionfilearea)
+                         AND filename <> :directoryfilename AND userid > 0";
         $params = [
             'kanbanid' => $cm->instance,
             'memberkanbanid' => $cm->instance,
@@ -173,6 +178,7 @@ class provider implements
             'filecontextid' => $context->id,
             'filecomponent' => 'mod_kanban',
             'filearea' => 'card_attachments',
+            'submissionfilearea' => 'submission_files',
             'directoryfilename' => '.',
         ];
         $userlist->add_from_sql('userid', $sql, $params);
@@ -273,13 +279,15 @@ class provider implements
             }
 
             $fs = get_file_storage();
-            foreach ($fs->get_area_files($context->id, 'mod_kanban', 'card_attachments', false,
-                    'itemid, filepath, filename', false) as $file) {
-                if (!$file->is_directory() && (int)$file->get_userid() === (int)$user->id) {
-                    writer::with_context($context)->export_file(
-                        ['Card attachments', (string)$file->get_itemid()],
-                        $file
-                    );
+            foreach (['card_attachments', 'submission_files'] as $filearea) {
+                foreach ($fs->get_area_files($context->id, 'mod_kanban', $filearea, false,
+                        'itemid, filepath, filename', false) as $file) {
+                    if (!$file->is_directory() && (int)$file->get_userid() === (int)$user->id) {
+                        writer::with_context($context)->export_file(
+                            [$filearea, (string)$file->get_itemid()],
+                            $file
+                        );
+                    }
                 }
             }
 
@@ -304,6 +312,7 @@ class provider implements
 
         self::delete_data_for_kanban((int)$cm->instance);
         get_file_storage()->delete_area_files($context->id, 'mod_kanban', 'card_attachments');
+        get_file_storage()->delete_area_files($context->id, 'mod_kanban', 'submission_files');
         get_file_storage()->delete_area_files($context->id, 'mod_kanban', 'intro');
         helper::delete_data_for_all_users_in_context('mod_kanban', $context);
     }
@@ -404,12 +413,14 @@ class provider implements
             ]);
 
         $files = $DB->get_records_select('files',
-            'contextid = :contextid AND component = :component AND filearea = :filearea
+            'contextid = :contextid AND component = :component
+                AND (filearea = :filearea OR filearea = :submissionfilearea)
                 AND userid = :userid AND filename <> :directoryfilename',
             [
                 'contextid' => $context->id,
                 'component' => 'mod_kanban',
                 'filearea' => 'card_attachments',
+                'submissionfilearea' => 'submission_files',
                 'userid' => $userid,
                 'directoryfilename' => '.',
             ],
@@ -427,12 +438,14 @@ class provider implements
             'files',
             'userid',
             null,
-            'contextid = :contextid AND component = :component AND filearea = :filearea
+            'contextid = :contextid AND component = :component
+                AND (filearea = :filearea OR filearea = :submissionfilearea)
                 AND userid = :userid AND filename = :directoryfilename',
             [
                 'contextid' => $context->id,
                 'component' => 'mod_kanban',
                 'filearea' => 'card_attachments',
+                'submissionfilearea' => 'submission_files',
                 'userid' => $userid,
                 'directoryfilename' => '.',
             ]

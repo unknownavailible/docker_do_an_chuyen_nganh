@@ -62,7 +62,7 @@
 
                 <div class="card-body kanban-card-list p-2 d-flex flex-column gap-2" style="flex: 1 1 auto; min-height: 380px;" data-columnid="{{id}}">
                     {{#cards}}
-                        <div class="kanban-card card shadow-sm border-0 p-3 position-relative" draggable="true" data-cardid="{{id}}" data-columntitle="{{column_title}}" data-submissionurl="{{submissionurl}}" data-assignees="{{assignee_names}}" data-assigneeids="{{assignee_ids}}" data-duedate="{{duedate_raw}}" data-title="{{title_raw}}" style="margin-bottom: 14px; background-color: #ffffff; border-radius: 6px;">
+                        <div class="kanban-card card shadow-sm border-0 p-3 position-relative" draggable="{{#can_update_progress}}true{{/can_update_progress}}{{^can_update_progress}}false{{/can_update_progress}}" data-cardid="{{id}}" data-columntitle="{{column_title}}" data-taskurl="{{taskurl}}" data-submissionurl="{{submissionurl}}" data-workflowstate="{{workflow_state}}" data-creator="{{creator_name}}" data-timecreated="{{timecreated_formatted}}" data-timemodified="{{timemodified_formatted}}" data-assignees="{{assignee_names}}" data-assigneeids="{{assignee_ids}}" data-duedate="{{duedate_raw}}" data-title="{{title_raw}}" style="margin-bottom: 14px; background-color: #ffffff; border-radius: 6px;">
                             <!-- Header thẻ và nút sửa/xóa -->
                             <div class="d-flex justify-content-between align-items-center mb-2">
                                 <div class="d-flex align-items-center gap-2">
@@ -178,7 +178,7 @@
                     <div class="mb-3">
                         <div>
                             <label for="card-duedate-input" class="form-label fw-bold text-primary">
-                                <i class="fa fa-calendar"></i> {{#str}}cardduedate, mod_kanban{{/str}}
+                                <i class="fa fa-calendar"></i> {{#str}}cardduedate, mod_kanban{{/str}} <span class="text-danger">*</span>
                             </label>
                             <input type="datetime-local" class="form-control" id="card-duedate-input">
                             <div class="form-text small text-muted">{{#str}}cardduedate_help, mod_kanban{{/str}}</div>
@@ -186,7 +186,7 @@
                     </div>
 
                     <div class="mb-3">
-                        <label class="form-label fw-semibold">{{#str}}cardassignee, mod_kanban{{/str}}</label>
+                        <label class="form-label fw-semibold">{{#str}}cardassignee, mod_kanban{{/str}} <span class="text-danger">*</span></label>
                         <div class="kanban-assignee-list border rounded p-2 bg-white" id="card-assignee-input">
                             {{#assignee_members}}
                                 <div class="form-check">
@@ -202,7 +202,7 @@
                     </div>
 
                     <div class="mb-3">
-                            <label for="card-url-input" class="form-label fw-semibold">{{#str}}cardurl, mod_kanban{{/str}}</label>
+                            <label for="card-url-input" class="form-label fw-semibold">{{#str}}taskurl, mod_kanban{{/str}}</label>
                             <input type="url" class="form-control" id="card-url-input" placeholder="https://...">
                             <div class="form-text small text-muted">{{#str}}cardurl_help, mod_kanban{{/str}}</div>
                     </div>
@@ -325,12 +325,45 @@
                 </div>
 
                 <!-- Khối đường link đặt ngoài row -->
+                <div class="small text-muted mb-3">
+                    <span>{{#str}}creator, mod_kanban{{/str}}: <strong id="detail-card-creator"></strong></span> ·
+                    <span>{{#str}}createdat, mod_kanban{{/str}}: <span id="detail-card-created"></span></span> ·
+                    <span>{{#str}}updatedat, mod_kanban{{/str}}: <span id="detail-card-updated"></span></span>
+                </div>
                 <div id="detail-card-url-container" class="mb-3 d-none">
-                    <label class="form-label fw-semibold text-muted mb-1">{{#str}}detail_url, mod_kanban{{/str}}</label>
+                    <label class="form-label fw-semibold text-muted mb-1">{{#str}}taskurl, mod_kanban{{/str}}</label>
                     <div class="p-2 bg-light rounded border">
                         <a id="detail-card-url" href="#" target="_blank" class="fw-bold text-primary text-decoration-underline text-break" style="word-wrap: break-word;"></a>
                     </div>
                 </div>
+                <div id="detail-submission-url-container" class="mb-3 d-none">
+                    <label class="form-label fw-semibold text-muted mb-1">{{#str}}submissionurl, mod_kanban{{/str}}</label>
+                    <div class="p-2 bg-light rounded border"><a id="detail-submission-url" href="#" target="_blank" class="text-break"></a></div>
+                </div>
+                {{#can_update_progress}}
+                <div class="border rounded p-3 mb-3 bg-light">
+                    <label for="detail-workflow-state" class="form-label fw-semibold">{{#str}}workflowstate, mod_kanban{{/str}}</label>
+                    <select id="detail-workflow-state" class="form-select mb-2">
+                        <option value="notstarted">{{#str}}workflow_notstarted, mod_kanban{{/str}}</option>
+                        <option value="inprogress">{{#str}}workflow_inprogress, mod_kanban{{/str}}</option>
+                        <option value="review">{{#str}}workflow_review, mod_kanban{{/str}}</option>
+                        {{#can_manage}}<option value="completed">{{#str}}workflow_completed, mod_kanban{{/str}}</option>{{/can_manage}}
+                    </select>
+                    <label for="detail-submission-url-input" class="form-label">{{#str}}submissionurl, mod_kanban{{/str}}</label>
+                    <input id="detail-submission-url-input" type="url" class="form-control mb-2" placeholder="https://...">
+                    <button type="button" id="detail-progress-submit" class="btn btn-primary btn-sm">{{#str}}saveprogress, mod_kanban{{/str}}</button>
+                    {{#can_manage}}
+                    <button type="button" id="detail-request-revision" class="btn btn-outline-warning btn-sm">{{#str}}requestrevision, mod_kanban{{/str}}</button>
+                    <button type="button" id="detail-approve" class="btn btn-success btn-sm">{{#str}}approvetask, mod_kanban{{/str}}</button>
+                    {{/can_manage}}
+                    <hr>
+                    <label for="detail-file-input" class="form-label">{{#str}}addfile, mod_kanban{{/str}}</label>
+                    <input id="detail-file-input" type="file" class="form-control mb-2" multiple>
+                    <button type="button" id="detail-submission-file-submit" class="btn btn-outline-primary btn-sm">{{#str}}uploadsubmission, mod_kanban{{/str}}</button>
+                    {{#can_manage}}<button type="button" id="detail-task-file-submit" class="btn btn-outline-secondary btn-sm">{{#str}}uploadtaskfile, mod_kanban{{/str}}</button>{{/can_manage}}
+                    <div id="detail-action-message" class="small mt-2"></div>
+                </div>
+                {{/can_update_progress}}
 
                 <div class="alert alert-info d-none" id="detail-card-alert" role="alert"></div>
 

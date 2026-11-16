@@ -282,6 +282,63 @@ class behat_mod_kanban extends behat_base {
     }
 
     /**
+     * Create a submitted card which should appear in the teacher review queue.
+     *
+     * @Given /^a submitted card is waiting for review in group "(?P<group>[^"]*)"$/
+     */
+    public function a_submitted_card_is_waiting_for_review(string $group): void {
+        global $DB;
+
+        $this->cardid = $this->create_card('In Progress', $group, 'Submission waiting for review');
+        kanban_set_card_assignees($this->cardid, [$this->users[$group]]);
+        $DB->set_field('kanban_cards', 'workflow_state', 'review', ['id' => $this->cardid]);
+        $DB->set_field('kanban_cards', 'submission_url', 'https://example.test/submission', ['id' => $this->cardid]);
+    }
+
+    /**
+     * Open the dashboard review queue and click the action for the current card.
+     *
+     * @When /^I click the review action for that card$/
+     */
+    public function i_click_the_review_action_for_that_card(): void {
+        $url = new moodle_url('/mod/kanban/dashboard.php', [
+            'id' => $this->cm->id,
+            'group' => $this->groups['Group A'],
+        ]);
+        $this->getSession()->visit($url->out(false));
+        if (!$this->getSession()->wait(10000, 'document.querySelector("a[href*=\\"cardid%3D' . $this->cardid . '\\"], a[href*=\\"cardid=' . $this->cardid . '\\"]") !== null')) {
+            throw new ExpectationException('The card was not present in the dashboard review queue.', $this->getSession());
+        }
+        $link = $this->getSession()->getPage()->find('css', 'a[href*="cardid=' . $this->cardid . '"]');
+        if (!$link) {
+            throw new ExpectationException('The review action link was not found.', $this->getSession());
+        }
+        $link->click();
+    }
+
+    /**
+     * Confirm the dashboard deep link opened the requested card detail automatically.
+     *
+     * @Then /^the submitted card detail should open automatically$/
+     */
+    public function the_submitted_card_detail_should_open_automatically(): void {
+        $cardid = (int)$this->cardid;
+        $opened = $this->getSession()->wait(10000, sprintf(
+            'document.querySelector("#modalCardDetail.show") !== null && ' .
+            'document.querySelector("#modalCardDetail").dataset.cardid === "%d"',
+            $cardid
+        ));
+        if (!$opened) {
+            throw new ExpectationException("Task Detail did not open automatically for card {$cardid}.",
+                $this->getSession());
+        }
+        $currenturl = $this->getSession()->getCurrentUrl();
+        if (strpos($currenturl, 'cardid=' . $cardid) === false) {
+            throw new ExpectationException('The Kanban URL does not identify the reviewed card.', $this->getSession());
+        }
+    }
+
+    /**
      * Create course, users, groups, board and columns for this scenario.
      */
     private function create_fixture(): void {
