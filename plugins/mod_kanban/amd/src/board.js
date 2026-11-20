@@ -15,10 +15,75 @@ define(['core/ajax', 'core/notification'], function(ajax, notification) {
             var draggedCard = null;
             var isDragging = false;
 
+            // Search and quick filters keep dense course boards scannable without a reload.
+            var searchInput = document.getElementById('kanban-search-input');
+            var groupSearchInput = document.getElementById('kanban-group-search-input');
+            var studentSearchInput = document.getElementById('kanban-student-search-input');
+            var filterButtons = document.querySelectorAll('[data-kanban-filter]');
+            var filterStatus = document.getElementById('kanban-filter-status');
+            var activeFilter = 'all';
+
+            function applyBoardFilters() {
+                var taskQuery = searchInput ? searchInput.value.trim().toLocaleLowerCase() : '';
+                var groupQuery = groupSearchInput ? groupSearchInput.value.trim().toLocaleLowerCase() : '';
+                var studentQuery = studentSearchInput ? studentSearchInput.value.trim().toLocaleLowerCase() : '';
+                var visible = 0;
+                document.querySelectorAll('.kanban-card').forEach(function(card) {
+                    var taskText = ((card.dataset.title || '') + ' ' + (card.dataset.description || '')).toLocaleLowerCase();
+                    var groupText = (card.dataset.group || '').toLocaleLowerCase();
+                    var studentText = (card.dataset.assignees || '').toLocaleLowerCase();
+                    var matchesSearch = (!taskQuery || taskText.indexOf(taskQuery) !== -1) &&
+                        (!groupQuery || groupText.indexOf(groupQuery) !== -1) &&
+                        (!studentQuery || studentText.indexOf(studentQuery) !== -1);
+                    var matchesQuick = activeFilter === 'all' ||
+                        (activeFilter === 'mine' && card.dataset.mine === '1') ||
+                        (activeFilter === 'overdue' && card.dataset.overdue === '1') ||
+                        (activeFilter === 'unassigned' && card.dataset.unassigned === '1');
+                    card.hidden = !(matchesSearch && matchesQuick);
+                    if (!card.hidden) {
+                        visible++;
+                    }
+                });
+                document.querySelectorAll('.kanban-column').forEach(function(column) {
+                    column.classList.toggle('is-empty-filtered', !column.querySelector('.kanban-card:not([hidden])'));
+                });
+                if (filterStatus) {
+                    filterStatus.textContent = getString('visiblecards', visible);
+                }
+            }
+
+            if (searchInput) {
+                searchInput.addEventListener('input', applyBoardFilters);
+            }
+            if (groupSearchInput) {
+                groupSearchInput.addEventListener('input', applyBoardFilters);
+            }
+            if (studentSearchInput) {
+                studentSearchInput.addEventListener('input', applyBoardFilters);
+            }
+            filterButtons.forEach(function(button) {
+                button.addEventListener('click', function() {
+                    activeFilter = this.dataset.kanbanFilter;
+                    filterButtons.forEach(function(item) {
+                        var selected = item === button;
+                        item.classList.toggle('active', selected);
+                        item.setAttribute('aria-pressed', selected ? 'true' : 'false');
+                    });
+                    applyBoardFilters();
+                });
+            });
+            applyBoardFilters();
+
             // ==========================================
             // 1. DRAG & DROP CARDS
             // ==========================================
             document.querySelectorAll('.kanban-card').forEach(function(card) {
+                card.addEventListener('keydown', function(e) {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        openDetailModal(this);
+                    }
+                });
                 card.addEventListener('dragstart', function(e) {
                     isDragging = true;
                     draggedCard = this;
@@ -133,7 +198,9 @@ define(['core/ajax', 'core/notification'], function(ajax, notification) {
                 // Show the modal and its backdrop.
                 modal.style.display = 'block';
                 modal.classList.add('show');
+                modal.setAttribute('aria-hidden', 'false');
                 document.body.classList.add('modal-open');
+                document.getElementById('card-title-input').focus();
 
                 var backdrop = document.getElementById('custom-modal-backdrop');
                 if (!backdrop) {
@@ -153,6 +220,7 @@ define(['core/ajax', 'core/notification'], function(ajax, notification) {
                 }
                 modal.style.display = 'none';
                 modal.classList.remove('show');
+                modal.setAttribute('aria-hidden', 'true');
                 document.body.classList.remove('modal-open');
                 var backdrop = document.getElementById('custom-modal-backdrop');
                 if (backdrop) {
@@ -319,6 +387,7 @@ define(['core/ajax', 'core/notification'], function(ajax, notification) {
                 // Show the modal.
                 detailModal.style.display = 'block';
                 detailModal.classList.add('show');
+                detailModal.setAttribute('aria-hidden', 'false');
                 document.body.classList.add('modal-open');
 
                 var backdrop = document.getElementById('detail-modal-backdrop');
@@ -351,6 +420,7 @@ define(['core/ajax', 'core/notification'], function(ajax, notification) {
                 }
                 detailModal.style.display = 'none';
                 detailModal.classList.remove('show');
+                detailModal.setAttribute('aria-hidden', 'true');
                 document.body.classList.remove('modal-open');
                 var backdrop = document.getElementById('detail-modal-backdrop');
                 if (backdrop) {
@@ -471,6 +541,18 @@ define(['core/ajax', 'core/notification'], function(ajax, notification) {
                 }
                 if (editModal && editModal.style.display === 'block' && e.target.id === 'edit-modal-backdrop') {
                     closeEditModal();
+                }
+            });
+
+            document.addEventListener('keydown', function(e) {
+                if (e.key === 'Escape') {
+                    if (detailModal && detailModal.classList.contains('show')) {
+                        closeDetailModal();
+                    } else if (columnModal && columnModal.classList.contains('show')) {
+                        closeColumnModal();
+                    } else if (modal && modal.classList.contains('show')) {
+                        closeModal();
+                    }
                 }
             });
 
@@ -899,6 +981,34 @@ define(['core/ajax', 'core/notification'], function(ajax, notification) {
                 });
             }
 
+            var columnModal = document.getElementById('modalColumn');
+            function closeColumnModal() {
+                if (!columnModal) {
+                    return;
+                }
+                columnModal.classList.remove('show');
+                columnModal.style.display = 'none';
+                columnModal.setAttribute('aria-hidden', 'true');
+                document.body.classList.remove('modal-open');
+            }
+
+            function openColumnModal(data) {
+                if (!columnModal) {
+                    return;
+                }
+                document.getElementById('column-id-input').value = data.columnid || '';
+                document.getElementById('column-title-input').value = data.title || '';
+                document.getElementById('column-description-input').value = data.description || '';
+                document.getElementById('column-color-input').value = data.color || '#eef4f8';
+                document.getElementById('column-wip-input').value = data.wip || '0';
+                document.getElementById('column-error-alert').classList.add('d-none');
+                columnModal.style.display = 'block';
+                columnModal.classList.add('show');
+                columnModal.setAttribute('aria-hidden', 'false');
+                document.body.classList.add('modal-open');
+                document.getElementById('column-title-input').focus();
+            }
+
             document.addEventListener('click', function(e) {
                 var addButton = e.target.closest && e.target.closest('.btn-add-column');
                 var editButton = e.target.closest && e.target.closest('.btn-edit-column');
@@ -906,45 +1016,7 @@ define(['core/ajax', 'core/notification'], function(ajax, notification) {
                 var moveButton = e.target.closest && e.target.closest('.btn-move-column');
 
                 if (addButton || editButton) {
-                    var editing = !!editButton;
-                    var data = editing ? editButton.dataset : {};
-                    var title = prompt(getString('columnnameprompt'), data.title || '');
-                    if (title === null) {
-                        return;
-                    }
-                    var description = prompt(getString('columndescprompt'), data.description || '');
-                    if (description === null) {
-                        return;
-                    }
-                    var color = prompt(getString('columncolorprompt'), data.color || '#f4f5f7');
-                    if (color === null) {
-                        return;
-                    }
-                    var wip = prompt(getString('columnwipprompt'), data.wip || '0');
-                    if (wip === null) {
-                        return;
-                    }
-                    var request;
-                    if (editing) {
-                        request = columnRequest('mod_kanban_update_column', {
-                            columnid: parseInt(data.columnid),
-                            title: title,
-                            description: description,
-                            color: color,
-                            wip_limit: parseInt(wip, 10)
-                        });
-                    } else {
-                        request = columnRequest('mod_kanban_create_column', {
-                            kanbanid: parseInt(kanbanid),
-                            title: title,
-                            description: description,
-                            color: color,
-                            wip_limit: parseInt(wip, 10)
-                        });
-                    }
-                    request.done(function() {
-                        window.location.reload();
-                    }).fail(notification.exception);
+                    openColumnModal(editButton ? editButton.dataset : {});
                     return;
                 }
 
@@ -977,6 +1049,42 @@ define(['core/ajax', 'core/notification'], function(ajax, notification) {
                         window.location.reload();
                     }).fail(notification.exception);
                 }
+            });
+
+            document.addEventListener('click', function(e) {
+                if (e.target.closest && e.target.closest('[data-column-dismiss]')) {
+                    closeColumnModal();
+                    return;
+                }
+                if (!(e.target.closest && e.target.closest('#btn-save-column'))) {
+                    return;
+                }
+                var id = document.getElementById('column-id-input').value;
+                var title = document.getElementById('column-title-input').value.trim();
+                var description = document.getElementById('column-description-input').value.trim();
+                var color = document.getElementById('column-color-input').value;
+                var wip = parseInt(document.getElementById('column-wip-input').value, 10) || 0;
+                var error = document.getElementById('column-error-alert');
+                if (!title) {
+                    error.textContent = getString('required');
+                    error.classList.remove('d-none');
+                    return;
+                }
+                var method = id ? 'mod_kanban_update_column' : 'mod_kanban_create_column';
+                var args = {title: title, description: description, color: color, wip_limit: wip};
+                if (id) {
+                    args.columnid = parseInt(id, 10);
+                } else {
+                    args.kanbanid = parseInt(kanbanid, 10);
+                }
+                e.target.disabled = true;
+                columnRequest(method, args).done(function() {
+                    window.location.reload();
+                }).fail(function(exception) {
+                    error.textContent = exception.message || getString('errorgeneric');
+                    error.classList.remove('d-none');
+                    e.target.disabled = false;
+                });
             });
 
             // ==========================================

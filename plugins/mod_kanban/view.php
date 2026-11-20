@@ -19,6 +19,7 @@ $PAGE->set_url('/mod/kanban/view.php', ['id' => $cm->id]);
 $PAGE->set_title(format_string($kanban->name));
 $PAGE->set_heading(format_string($course->fullname));
 $PAGE->set_context($context);
+$PAGE->requires->css(new moodle_url('/mod/kanban/styles.css', ['v' => '2026111904']));
 
 $currentgroup = groups_get_activity_group($cm, true);
 $autopencardid = 0;
@@ -54,8 +55,13 @@ foreach ($columns as $col) {
         $is_overdue = (!$is_done && $card->duedate > 0 && $card->duedate < time());
         $is_due_soon = (!$is_done && !$is_overdue && $card->duedate > 0 && $card->duedate <= (time() + 86400 * 2)); // trong 48h
         $has_feedback = $comments_table_exists && $DB->count_records('kanban_card_comments', ['cardid' => $card->id]) > 0;
+        $commentcount = $comments_table_exists ? $DB->count_records('kanban_card_comments', ['cardid' => $card->id]) : 0;
+        $fs = get_file_storage();
+        $attachmentcount = count($fs->get_area_files($context->id, 'mod_kanban', 'card_attachments', $card->id, 'id', false)) +
+            count($fs->get_area_files($context->id, 'mod_kanban', 'submission_files', $card->id, 'id', false));
         $assigneenames = kanban_get_card_assignee_names($card->id);
         $assigneeids = kanban_get_card_assignee_ids($card->id);
+        $groupname = $card->groupid ? groups_get_group_name($card->groupid) : '';
         $cardcreator = !empty($card->creatorid) ? $DB->get_record('user', ['id' => $card->creatorid]) : false;
 
         $card_list[] = [
@@ -65,6 +71,7 @@ foreach ($columns as $col) {
             'title_raw' => $card->title,
             'description' => format_text($card->description, FORMAT_MOODLE),
             'description_raw' => $card->description ?? '',
+            'group_name' => $groupname ?: '',
             'assignee_names' => $assigneenames,
             'assignee_ids' => implode(',', $assigneeids),
             'duedate_raw' => (int)($card->duedate ?? 0),
@@ -72,6 +79,16 @@ foreach ($columns as $col) {
             'is_overdue' => $is_overdue,
             'is_due_soon' => $is_due_soon,
             'has_feedback' => $has_feedback,
+            'comment_count' => $commentcount,
+            'attachment_count' => $attachmentcount,
+            'has_comments' => $commentcount > 0,
+            'has_attachments' => $attachmentcount > 0,
+            'priority' => $card->priority ?? 'medium',
+            'priority_high' => ($card->priority ?? 'medium') === 'high',
+            'priority_medium' => ($card->priority ?? 'medium') === 'medium',
+            'priority_low' => ($card->priority ?? 'medium') === 'low',
+            'is_mine' => in_array((int)$USER->id, $assigneeids, true),
+            'is_unassigned' => empty($assigneeids),
             'taskurl' => $card->task_url ?? '',
             'submissionurl' => $card->submission_url ?? '',
             'workflow_state' => $card->workflow_state ?? 'notstarted',
@@ -116,8 +133,10 @@ $templatecontext = [
     'can_manage_columns' => has_capability('mod/kanban:managecolumns', $context) ||
         has_capability('mod/kanban:viewdashboard', $context),
     'can_view_dashboard' => has_capability('mod/kanban:viewdashboard', $context),
+    'is_teacher_view' => has_capability('mod/kanban:managecards', $context),
     'dashboard_url' => (new moodle_url('/mod/kanban/dashboard.php', ['id' => $cm->id]))->out(),
     'assignee_members' => kanban_get_group_members_for_assignee_selection($cm),
+    'first_column_id' => $column_data ? $column_data[0]['id'] : 0,
     'columns' => $column_data
 ];
 
@@ -131,6 +150,7 @@ $PAGE->requires->strings_for_js([
     'required', 'error_duedate_past', 'dashboard_unassigned',
     'error_assignment_fields_required', 'submissionfile', 'taskfile', 'error_upload_empty',
     'revisioncommentrequired',
+    'visiblecards',
 ], 'mod_kanban');
 $PAGE->requires->js_call_amd('mod_kanban/board', 'init', [$cm->id, $kanban->id, $autopencardid, (int)$currentgroup]);
 

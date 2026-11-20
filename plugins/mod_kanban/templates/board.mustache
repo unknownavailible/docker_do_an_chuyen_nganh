@@ -1,25 +1,4 @@
-<div class="kanban-board-container my-3" data-cmid="{{cmid}}" data-kanbanid="{{kanbanid}}">
-    <!-- Nút Dashboard cho Giảng viên -->
-    {{#can_view_dashboard}}
-        <div class="d-flex justify-content-end mb-3">
-            <a href="{{dashboard_url}}" class="btn btn-primary shadow-sm px-3 py-2 fw-semibold">
-                <i class="fa fa-bar-chart me-2"></i> {{#str}}dashboard, mod_kanban{{/str}}
-            </a>
-        </div>
-    {{/can_view_dashboard}}
-
-    {{#intro}}
-        <div class="card mb-4 shadow-sm border-0">
-            <div class="card-body bg-light rounded">
-                {{{intro}}}
-            </div>
-        </div>
-    {{/intro}}
-
-    <div class="text-muted small mb-3">
-        <i class="fa fa-user me-1"></i> {{#str}}creator, mod_kanban{{/str}}: <strong>{{creatorname}}</strong>
-    </div>
-
+<div class="kanban-board-container" data-cmid="{{cmid}}" data-kanbanid="{{kanbanid}}">
     {{#linkedassignment}}
         <div class="alert alert-secondary d-flex justify-content-between align-items-center mb-3">
             <div>
@@ -32,18 +11,30 @@
         </div>
     {{/linkedassignment}}
 
-    {{#can_manage_columns}}
-        <div class="d-flex justify-content-end mb-3">
-            <button type="button" class="btn btn-outline-primary btn-sm btn-add-column">
-                <i class="fa fa-plus"></i> {{#str}}addcolumn, mod_kanban{{/str}}
-            </button>
+    <div class="kanban-toolbar" role="search" aria-label="{{#str}}filtertasks, mod_kanban{{/str}}">
+        <div class="kanban-search-fields">
+            <label class="kanban-search-field" for="kanban-search-input"><i class="fa fa-tasks" aria-hidden="true"></i><span class="sr-only">{{#str}}searchtasks, mod_kanban{{/str}}</span><input id="kanban-search-input" type="search" class="form-control" placeholder="{{#str}}searchtasks_short, mod_kanban{{/str}}"></label>
+            <label class="kanban-search-field" for="kanban-group-search-input"><i class="fa fa-users" aria-hidden="true"></i><span class="sr-only">{{#str}}searchgroups, mod_kanban{{/str}}</span><input id="kanban-group-search-input" type="search" class="form-control" placeholder="{{#str}}searchgroups, mod_kanban{{/str}}"></label>
+            <label class="kanban-search-field" for="kanban-student-search-input"><i class="fa fa-user" aria-hidden="true"></i><span class="sr-only">{{#str}}searchstudents, mod_kanban{{/str}}</span><input id="kanban-student-search-input" type="search" class="form-control" placeholder="{{#str}}searchstudents, mod_kanban{{/str}}"></label>
         </div>
-    {{/can_manage_columns}}
+        <div class="kanban-quick-filters" aria-label="{{#str}}quickfilters, mod_kanban{{/str}}">
+            <button type="button" class="btn btn-sm active" data-kanban-filter="all" aria-pressed="true">{{#str}}filterall, mod_kanban{{/str}}</button>
+            <button type="button" class="btn btn-sm" data-kanban-filter="mine" aria-pressed="false"><i class="fa fa-user" aria-hidden="true"></i> {{#str}}filtermine, mod_kanban{{/str}}</button>
+            <button type="button" class="btn btn-sm" data-kanban-filter="overdue" aria-pressed="false"><i class="fa fa-clock-o" aria-hidden="true"></i> {{#str}}filteroverdue, mod_kanban{{/str}}</button>
+            {{#can_manage}}<button type="button" class="btn btn-sm" data-kanban-filter="unassigned" aria-pressed="false"><i class="fa fa-user-times" aria-hidden="true"></i> {{#str}}filterunassigned, mod_kanban{{/str}}</button>{{/can_manage}}
+        </div>
+        <div id="kanban-filter-status" class="kanban-filter-status" aria-live="polite"></div>
+        <div class="kanban-toolbar-actions">
+            {{#can_view_dashboard}}<a href="{{dashboard_url}}" class="btn btn-sm btn-outline-primary"><i class="fa fa-bar-chart" aria-hidden="true"></i> {{#str}}dashboard, mod_kanban{{/str}}</a>{{/can_view_dashboard}}
+            {{#can_manage_columns}}<button type="button" class="btn btn-sm btn-outline-secondary btn-add-column"><i class="fa fa-columns" aria-hidden="true"></i> {{#str}}addcolumn, mod_kanban{{/str}}</button>{{/can_manage_columns}}
+            {{#can_manage}}<button type="button" class="btn btn-sm btn-primary btn-open-modal" data-columnid="{{first_column_id}}"><i class="fa fa-plus" aria-hidden="true"></i> {{#str}}assignwork, mod_kanban{{/str}}</button>{{/can_manage}}
+        </div>
+    </div>
 
     <!-- Hàng các Cột Kanban -->
-    <div class="kanban-board pb-4" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 24px; width: 100%; min-height: 550px; align-items: stretch;">
+    <div class="kanban-board" aria-label="{{kanbanname}}">
         {{#columns}}
-            <div class="kanban-column card shadow-sm border-0" style="display: flex; flex-direction: column; min-width: 0; background-color: {{color}};" data-columnid="{{id}}">
+            <section class="kanban-column" data-columnid="{{id}}">
                 <div class="card-header d-flex justify-content-between align-items-center bg-transparent border-bottom-0 pb-1 pt-3">
                     <div>
                         <h6 class="card-title fw-bold mb-0 text-dark">{{title}}</h6>
@@ -52,7 +43,7 @@
                     <div class="d-flex align-items-center gap-1">
                         <span class="badge bg-secondary rounded-pill px-2 py-1">{{card_count}}</span>
                         {{#can_manage_columns}}
-                            <button type="button" class="btn btn-sm btn-link p-0 btn-edit-column" data-columnid="{{id}}" data-title="{{title}}" data-description="{{description}}" data-color="{{color}}" data-wip="{{wip_limit}}" title="{{#str}}editcolumn, mod_kanban{{/str}}"><i class="fa fa-pencil"></i></button>
+                            <button type="button" class="kanban-icon-button btn-edit-column" data-columnid="{{id}}" data-title="{{title}}" data-description="{{description}}" data-color="{{color}}" data-wip="{{wip_limit}}" aria-label="{{#str}}editcolumn, mod_kanban{{/str}}"><i class="fa fa-pencil"></i></button>
                             <button type="button" class="btn btn-sm btn-link text-danger p-0 btn-delete-column" data-columnid="{{id}}" data-title="{{title}}" title="{{#str}}deletecolumn, mod_kanban{{/str}}"><i class="fa fa-trash-o"></i></button>
                             <button type="button" class="btn btn-sm btn-link p-0 btn-move-column" data-columnid="{{id}}" data-direction="-1" title="{{#str}}moveleft, mod_kanban{{/str}}"><i class="fa fa-arrow-left"></i></button>
                             <button type="button" class="btn btn-sm btn-link p-0 btn-move-column" data-columnid="{{id}}" data-direction="1" title="{{#str}}moveright, mod_kanban{{/str}}"><i class="fa fa-arrow-right"></i></button>
@@ -60,12 +51,12 @@
                     </div>
                 </div>
 
-                <div class="card-body kanban-card-list p-2 d-flex flex-column gap-2" style="flex: 1 1 auto; min-height: 380px;" data-columnid="{{id}}">
+                <div class="kanban-card-list" data-columnid="{{id}}">
                     {{#cards}}
-                        <div class="kanban-card card shadow-sm border-0 p-3 position-relative" draggable="{{#can_update_progress}}true{{/can_update_progress}}{{^can_update_progress}}false{{/can_update_progress}}" data-cardid="{{id}}" data-columntitle="{{column_title}}" data-taskurl="{{taskurl}}" data-submissionurl="{{submissionurl}}" data-workflowstate="{{workflow_state}}" data-creator="{{creator_name}}" data-timecreated="{{timecreated_formatted}}" data-timemodified="{{timemodified_formatted}}" data-assignees="{{assignee_names}}" data-assigneeids="{{assignee_ids}}" data-duedate="{{duedate_raw}}" data-title="{{title_raw}}" style="margin-bottom: 14px; background-color: #ffffff; border-radius: 6px;">
+                        <article class="kanban-card" tabindex="0" draggable="{{#can_update_progress}}true{{/can_update_progress}}{{^can_update_progress}}false{{/can_update_progress}}" data-cardid="{{id}}" data-columntitle="{{column_title}}" data-taskurl="{{taskurl}}" data-submissionurl="{{submissionurl}}" data-workflowstate="{{workflow_state}}" data-priority="{{priority}}" data-mine="{{#is_mine}}1{{/is_mine}}{{^is_mine}}0{{/is_mine}}" data-unassigned="{{#is_unassigned}}1{{/is_unassigned}}{{^is_unassigned}}0{{/is_unassigned}}" data-overdue="{{#is_overdue}}1{{/is_overdue}}{{^is_overdue}}0{{/is_overdue}}" data-creator="{{creator_name}}" data-timecreated="{{timecreated_formatted}}" data-timemodified="{{timemodified_formatted}}" data-group="{{group_name}}" data-assignees="{{assignee_names}}" data-assigneeids="{{assignee_ids}}" data-duedate="{{duedate_raw}}" data-title="{{title_raw}}" data-description="{{description_raw}}">
                             <!-- Header thẻ và nút sửa/xóa -->
                             <div class="d-flex justify-content-between align-items-center mb-2">
-                                <div class="d-flex align-items-center gap-2">
+                                <div class="kanban-card-labels">
                                     {{#has_feedback}}
                                         <span class="badge bg-warning text-dark px-2" style="font-size: 0.68rem;" title="{{#str}}feedback_title, mod_kanban{{/str}}">
                                             <i class="fa fa-commenting"></i> {{#str}}feedback, mod_kanban{{/str}}
@@ -124,10 +115,14 @@
                                 </div>
                             {{/duedate_formatted}}
 
-                            <button type="button" class="btn btn-sm btn-outline-info w-100 mt-2 btn-view-card" data-cardid="{{id}}">
-                                <i class="fa fa-eye me-1"></i> {{#str}}viewdetails, mod_kanban{{/str}}
-                            </button>
-                        </div>
+                            <div class="kanban-card-footer">
+                                <div class="kanban-card-stats">
+                                    {{#has_attachments}}<span><i class="fa fa-paperclip" aria-hidden="true"></i> {{attachment_count}}</span>{{/has_attachments}}
+                                    {{#has_comments}}<span><i class="fa fa-comment-o" aria-hidden="true"></i> {{comment_count}}</span>{{/has_comments}}
+                                </div>
+                                <button type="button" class="btn btn-sm btn-link btn-view-card" data-cardid="{{id}}">{{#str}}open, mod_kanban{{/str}} <i class="fa fa-arrow-right" aria-hidden="true"></i></button>
+                            </div>
+                        </article>
                     {{/cards}}
 
                     {{^has_cards}}
@@ -145,13 +140,37 @@
                         </button>
                     </div>
                 {{/can_manage}}
-            </div>
+            </section>
         {{/columns}}
     </div>
 </div>
 
+{{#can_manage_columns}}
+<div class="modal fade" id="modalColumn" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="modalColumnLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div><div class="kanban-role-label">{{#str}}boardstructure, mod_kanban{{/str}}</div><h5 class="modal-title" id="modalColumnLabel">{{#str}}columnsettings, mod_kanban{{/str}}</h5></div>
+                <button type="button" class="btn-close" data-column-dismiss aria-label="{{#str}}btn_close, mod_kanban{{/str}}"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="column-id-input">
+                <div id="column-error-alert" class="alert alert-danger d-none" role="alert"></div>
+                <div class="mb-3"><label for="column-title-input" class="form-label fw-semibold">{{#str}}columnname, mod_kanban{{/str}}</label><input id="column-title-input" class="form-control" maxlength="100" required></div>
+                <div class="mb-3"><label for="column-description-input" class="form-label fw-semibold">{{#str}}columndescription, mod_kanban{{/str}}</label><textarea id="column-description-input" class="form-control" rows="3"></textarea></div>
+                <div class="row g-3">
+                    <div class="col-sm-6"><label for="column-color-input" class="form-label fw-semibold">{{#str}}columncolor, mod_kanban{{/str}}</label><input id="column-color-input" type="color" class="form-control form-control-color" value="#eef4f8"></div>
+                    <div class="col-sm-6"><label for="column-wip-input" class="form-label fw-semibold">{{#str}}columnwip, mod_kanban{{/str}}</label><input id="column-wip-input" type="number" min="0" class="form-control" value="0"><div class="form-text">{{#str}}columnwiphelp, mod_kanban{{/str}}</div></div>
+                </div>
+            </div>
+            <div class="modal-footer"><button type="button" class="btn btn-secondary" data-column-dismiss>{{#str}}btn_cancel, mod_kanban{{/str}}</button><button type="button" class="btn btn-primary" id="btn-save-column">{{#str}}btn_save, mod_kanban{{/str}}</button></div>
+        </div>
+    </div>
+</div>
+{{/can_manage_columns}}
+
 <!-- POPUP MODAL THÊM CÔNG VIỆC MỚI KÈM KIỂM TRA THỜI GIAN -->
-<div class="modal fade" id="modalAddCard" tabindex="-1" aria-labelledby="modalAddCardLabel" aria-hidden="true">
+<div class="modal fade" id="modalAddCard" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="modalAddCardLabel" aria-hidden="true">
     <div class="modal-dialog">
         <div class="modal-content border-0 shadow">
             <div class="modal-header bg-primary text-white">
@@ -225,7 +244,7 @@
 </div>
 
 <!-- POPUP MODAL SỬA CÔNG VIỆC (gồm sửa người phụ trách) -->
-<div class="modal fade" id="modalEditCard" tabindex="-1" aria-labelledby="modalEditCardLabel" aria-hidden="true">
+<div class="modal fade" id="modalEditCard" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="modalEditCardLabel" aria-hidden="true">
     <div class="modal-dialog">
         <div class="modal-content border-0 shadow">
             <div class="modal-header bg-warning text-dark">
@@ -282,7 +301,7 @@
 </div>
 
 <!-- MODAL XEM CHI TIẾT CÔNG VIỆC -->
-<div class="modal fade" id="modalCardDetail" tabindex="-1" aria-labelledby="modalCardDetailLabel" aria-hidden="true">
+<div class="modal fade" id="modalCardDetail" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="modalCardDetailLabel" aria-hidden="true">
     <div class="modal-dialog modal-lg">
         <div class="modal-content border-0 shadow">
             <div class="modal-header bg-info text-white">
@@ -370,14 +389,14 @@
                 <hr>
                 <h6 class="fw-bold"><i class="fa fa-comments me-1"></i> {{#str}}comments_title, mod_kanban{{/str}}</h6>
                 <div id="detail-card-comments" class="mb-3"></div>
-                {{#can_manage}}
+                {{#can_update_progress}}
                     <div class="input-group mb-3">
                         <input type="text" class="form-control" id="detail-card-comment-input" placeholder="{{#str}}comment_ph, mod_kanban{{/str}}">
                         <button type="button" class="btn btn-primary" id="detail-card-comment-submit" title="{{#str}}comments_title, mod_kanban{{/str}}">
                             <i class="fa fa-send"></i>
                         </button>
                     </div>
-                {{/can_manage}}
+                {{/can_update_progress}}
 
                 {{#can_view_dashboard}}
                     <h6 class="fw-bold"><i class="fa fa-history me-1"></i> {{#str}}history_title, mod_kanban{{/str}}</h6>

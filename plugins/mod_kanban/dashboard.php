@@ -17,6 +17,7 @@ $PAGE->set_url('/mod/kanban/dashboard.php', ['id' => $cm->id]);
 $PAGE->set_title(get_string('dashboard', 'mod_kanban') . ' - ' . format_string($kanban->name));
 $PAGE->set_heading(format_string($course->fullname));
 $PAGE->set_context($context);
+$PAGE->requires->css(new moodle_url('/mod/kanban/styles.css', ['v' => '2026111904']));
 
 // Lấy thông tin nhóm sinh viên hiện tại
 $currentgroup = groups_get_activity_group($cm, true);
@@ -274,9 +275,9 @@ groups_print_activity_menu($cm, $CFG->wwwroot . '/mod/kanban/dashboard.php?id=' 
     <?php endif; ?>
 
     <!-- Các thẻ thống kê KPI theo workflow -->
-    <div class="row g-3 mb-4">
+    <div class="row g-3 mb-4 kanban-kpi-grid">
         <div class="col-md-6 col-xl">
-            <div class="card shadow-sm border-0 bg-primary text-white p-3 rounded">
+            <div class="card kanban-kpi-card kanban-kpi-total p-3">
                 <div class="d-flex justify-content-between align-items-center">
                     <div>
                         <div class="text-white-50 small text-uppercase fw-bold"><?php echo get_string('dashboard_kpi_total', 'mod_kanban'); ?></div>
@@ -288,7 +289,7 @@ groups_print_activity_menu($cm, $CFG->wwwroot . '/mod/kanban/dashboard.php?id=' 
         </div>
 
         <div class="col-md-6 col-xl">
-            <div class="card shadow-sm border-0 bg-success text-white p-3 rounded">
+            <div class="card kanban-kpi-card kanban-kpi-progress p-3">
                 <div class="d-flex justify-content-between align-items-center">
                     <div>
                         <div class="text-white-50 small text-uppercase fw-bold"><?php echo get_string('dashboard_kpi_progress', 'mod_kanban'); ?></div>
@@ -303,7 +304,7 @@ groups_print_activity_menu($cm, $CFG->wwwroot . '/mod/kanban/dashboard.php?id=' 
         </div>
 
         <div class="col-md-6 col-xl">
-            <div class="card shadow-sm border-0 bg-danger text-white p-3 rounded">
+            <div class="card kanban-kpi-card kanban-kpi-overdue p-3">
                 <div class="d-flex justify-content-between align-items-center">
                     <div>
                         <div class="text-white-50 small text-uppercase fw-bold"><?php echo get_string('dashboard_kpi_overdue', 'mod_kanban'); ?></div>
@@ -315,7 +316,7 @@ groups_print_activity_menu($cm, $CFG->wwwroot . '/mod/kanban/dashboard.php?id=' 
         </div>
 
         <div class="col-md-6 col-xl">
-            <div class="card shadow-sm border-0 bg-warning text-dark p-3 rounded">
+            <div class="card kanban-kpi-card kanban-kpi-due p-3">
                 <div class="d-flex justify-content-between align-items-center">
                     <div>
                         <div class="small text-uppercase fw-bold opacity-75"><?php echo get_string('dashboard_kpi_duesoon', 'mod_kanban'); ?></div>
@@ -327,7 +328,7 @@ groups_print_activity_menu($cm, $CFG->wwwroot . '/mod/kanban/dashboard.php?id=' 
         </div>
 
         <div class="col-md-6 col-xl">
-            <div class="card shadow-sm border-0 bg-info text-white p-3 rounded">
+            <div class="card kanban-kpi-card kanban-kpi-review p-3">
                 <div class="d-flex justify-content-between align-items-center">
                     <div>
                         <div class="text-white-50 small text-uppercase fw-bold"><?php echo get_string('dashboard_kpi_review', 'mod_kanban'); ?></div>
@@ -342,14 +343,14 @@ groups_print_activity_menu($cm, $CFG->wwwroot . '/mod/kanban/dashboard.php?id=' 
     <?php if ($columnchart && $progresschart && $totalcards > 0): ?>
     <!-- Biểu đồ -->
     <div class="row g-3 mb-4">
-        <div class="col-md-7">
+        <div class="col-12">
             <div class="card shadow-sm border-0">
                 <div class="card-body">
                     <?php echo $OUTPUT->render($columnchart); ?>
                 </div>
             </div>
         </div>
-        <div class="col-md-5">
+        <div class="col-12">
             <div class="card shadow-sm border-0">
                 <div class="card-body">
                     <?php echo $OUTPUT->render($progresschart); ?>
